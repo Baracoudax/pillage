@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#141218" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Pillage — Nuit d'émeutes</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="game"></div>
+
+  <!-- ====================== HUD ====================== -->
+  <div id="hud">
+    <div id="vignette"></div>
+    <div id="gasOverlay"></div>
+    <div id="dmgDir"><div></div></div>
+    <div id="crosshair"></div>
+    <div id="lockHint">Clique pour jouer · Échap = pause</div>
+
+    <div class="tl">
+      <div class="bar hp"><div id="hpFill"></div><span>❤ <b id="hpTxt">100</b></span></div>
+      <div class="bar st"><div id="stFill"></div></div>
+      <div class="row-s"><span id="weaponTxt"></span> <span id="ammoTxt"></span> <span id="bandTxt"></span></div>
+      <div class="bar w"><div id="wFill"></div><span>🎒 <b id="wTxt">0 / 8 kg</b> · <b id="vTxt">0 €</b></span></div>
+    </div>
+    <div class="tc">
+      <div id="timer">8:00</div>
+      <div class="heat"><span>TENSION</span><div><div id="heatFill"></div></div></div>
+      <div id="roomCode"></div>
+    </div>
+    <div class="tr">
+      <canvas id="minimap" width="150" height="150"></canvas>
+      <div id="exits"></div>
+      <div id="fps"></div>
+    </div>
+    <div id="toasts"></div>
+    <div class="bc">
+      <div id="prompt"></div>
+      <div id="hold"><div id="holdFill"></div></div>
+    </div>
+    <div id="extract"><span>EXTRACTION…</span><div><div id="extractFill"></div></div></div>
+
+    <div id="touch">
+      <div class="stick"><div class="knob"></div></div>
+      <div class="btns">
+        <button data-act="attack" class="big">👊</button>
+        <button data-act="interact" id="btnUse">✋</button>
+        <button data-act="sprint">🏃</button>
+        <button data-act="crouch">🧎</button>
+        <button data-act="heal">🩹</button>
+        <button data-act="inv">🎒</button>
+        <button data-act="pause" class="mini">⏸</button>
+      </div>
+    </div>
+
+    <div id="invPanel" class="panel">
+      <h3>Sac à dos <small id="invSum"></small></h3>
+      <div id="invList"></div>
+      <p class="hint">Tab / I pour fermer. Jeter un objet le laisse au sol.</p>
+    </div>
+    <div id="pause" class="panel">
+      <h3>Pause</h3>
+      <button id="btnResume" class="primary">Reprendre</button>
+      <button id="btnQuit" class="danger">Abandonner le raid (butin perdu)</button>
+      <div class="controls">
+        <b>Contrôles PC</b> — ZQSD/WASD : bouger · Souris : caméra · Clic gauche : frapper/tirer ·
+        Clic droit / V : coup de poing · E (maintenir) : piller · Maj : sprint · C : s'accroupir ·
+        H / 1 : bandage · Tab : sac · Échap : pause
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== MENU ====================== -->
+  <div id="menu" class="on">
+    <header>
+      <div class="logo">PILLAGE<small>nuit d'émeutes</small></div>
+      <div class="wallet"><span id="mName"></span><b id="mMoney">0 €</b></div>
+    </header>
+    <nav>
+      <button data-tab="raid" class="on">🔥 Raid</button>
+      <button data-tab="stash">📦 Planque</button>
+      <button data-tab="shop">🛒 Marché noir</button>
+      <button data-tab="settings">⚙️ Réglages</button>
+    </nav>
+    <main>
+      <section id="tab-raid" class="on">
+        <h2>Choisis ton quartier</h2>
+        <div id="districts" class="cards"></div>
+        <h2>Ton équipement</h2>
+        <div id="loadout" class="loadout"></div>
+        <h2>Lancer</h2>
+        <div class="launch">
+          <button id="btnSolo" class="primary big">▶ Solo</button>
+          <div class="multi">
+            <button id="btnCreate">👥 Créer une partie</button>
+            <label class="chk"><input type="checkbox" id="chkPublic" checked /> publique</label>
+            <div class="join"><input id="joinCode" maxlength="4" placeholder="CODE" /><button id="btnJoin">Rejoindre</button></div>
+          </div>
+        </div>
+        <div class="public"><h3>Parties publiques <button id="btnRefresh" class="mini">↻</button></h3><div id="roomList" class="hint">—</div></div>
+        <p class="hint">En multijoueur, les autres pilleurs peuvent te mettre K.O. et récupérer ton sac. Butin perdu si tu tombes, si tu te fais interpeller ou si le temps s'écoule.</p>
+      </section>
+      <section id="tab-stash">
+        <h2>Ta planque <button id="btnSellAll" class="primary">Tout vendre au receleur</button></h2>
+        <div id="stash" class="list"></div>
+        <h2>Statistiques</h2>
+        <div id="stats" class="stats"></div>
+      </section>
+      <section id="tab-shop">
+        <h2>Marché noir</h2>
+        <div id="shop"></div>
+      </section>
+      <section id="tab-settings">
+        <h2>Réglages</h2>
+        <div class="form">
+          <label>Pseudo <input id="setName" maxlength="16" /></label>
+          <label>Qualité graphique
+            <select id="setQuality">
+              <option value="auto">Auto</option><option value="low">Bas (mobiles modestes)</option>
+              <option value="medium">Moyen</option><option value="high">Haut (ombres, lumières)</option>
+            </select>
+          </label>
+          <label>Sensibilité <input id="setSens" type="range" min="0.3" max="2.5" step="0.1" /></label>
+          <label>Volume <input id="setVol" type="range" min="0" max="1" step="0.05" /></label>
+          <button id="btnReset" class="danger">Réinitialiser la progression</button>
+          <p class="hint" id="gpuInfo"></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="result" class="panel">
+    <h2 id="resTitle"></h2>
+    <p id="resSub"></p>
+    <div id="resList" class="list"></div>
+    <button id="btnBack" class="primary big">Retour à la planque</button>
+  </div>
+  <div id="loading"><div>Chargement…</div></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
