@@ -87,7 +87,7 @@ réseau.
   dynamique** qui ajuste le pixel ratio pour viser 55–60 FPS. Le brouillard limite la distance d'affichage
   et les personnages lointains sont ignorés.
 - **Serveur** : pathfinding A* sur grille avec budget par tick, PNJ éloignés de tous les joueurs mis à jour
-  4× moins souvent, environ 0,1 à 0,3 ms par tick pour 30 à 45 PNJ. **Réseau** : snapshots à 10 Hz filtrés
+  4× moins souvent, moins de 1,5 ms par tick pour 30 à 45 PNJ (mesuré par `npm test`). **Réseau** : snapshots à 10 Hz filtrés
   par distance (zone d'intérêt de 90 m, ~0,5 ko), projectiles simulés côté client à partir de leur
   vitesse initiale, et snapshots sautés si un client n'arrive plus à suivre.
 - Les shaders sont précompilés pendant l'écran de chargement. Les sons sont synthétisés en WebAudio
