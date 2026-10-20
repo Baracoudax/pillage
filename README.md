@@ -28,7 +28,9 @@ qui se connecte à un serveur distant : `https://mon-jeu/?server=https://mon-ser
 |---|---|
 | **Raid** | 8 à 10 min. On apparaît dans le quartier, on pille, on rejoint l'une des 3 sorties (la 3e ouvre plus tard). Rester 6 s dans la zone verte. |
 | **Loot** | Objets en rayon (couleur = rareté) et caisses enregistreuses, plus longues à vider. Chaque objet a un poids : le sac limite ce qu'on emporte. |
-| **Armes (FPS)** | Pistolets (Makarov, Luger, lance-fusées), PM (Grease Gun, Suomi), fusil à pompe, AK-47, M4A1, fusil de précision à lunette. Visée (clic droit), recul, rechargement, tirs à la tête. Grenades : fumigène (bloque la vue des CRS), aveuglante, à fragmentation, cocktail Molotov, mine Claymore. **Chaque coup de feu s'entend et attire les CRS.** |
+| **Progression des armes** | 3 contacts au marché noir, débloqués en revendant du butin. **Le quartier** (au départ) : barre de fer, pied-de-biche (force les caisses 2× plus vite), batte cloutée, et pierres (15 trouvées sur place à chaque raid). **L'artificier** (1 500 € revendus) : mortier d'artifice (3 bombes qui étourdissent en zone), lance-fusées, masse, Molotov, fumigènes, masque à gaz. **Le trafiquant** (12 000 € revendus et Centre-ville débloqué) : armes à feu (Makarov, Luger, Grease Gun, Suomi, fusil à pompe, AK-47, M4A1, fusil de précision), grenades, Claymore, gilet pare-balles. |
+| **Escalade policière** | Sans arme à feu, on n'affronte que les CRS. Dès qu'un pilleur entre armé dans le raid, la police s'équipe : les CRS repèrent de plus loin, tirent plus souvent au LBD et plus fort. Ils repèrent tout de suite une arme à feu en main (la ranger permet de rester discret). Au premier coup de feu, **le GIGN est appelé** et arrive environ 35 s plus tard, au plus tard 2 min 30 après l'entrée d'un pilleur armé. Ses escouades de 4 tirent en rafales au fusil d'assaut, lancent des grenades aveuglantes, encaissent beaucoup (200 PV, gilet et casque) et foncent vers les derniers coups de feu. Plus on tire, plus il y a d'escouades (jusqu'à 3). Neutralisé par le GIGN : butin saisi et amende de 25 %. |
+| **FPS** | Visée (clic droit), recul, rechargement, tirs à la tête. Chaque coup de feu s'entend et attire la police. |
 | **Gilets jaunes** | Des cortèges défilent de carrefour en carrefour et se rassemblent au rond-point occupé (cercle jaune sur la minimap). Au milieu d'un cortège, la distance de détection des CRS est fortement réduite ; avec la tenue « Gilet jaune », tu deviens presque invisible. Si tu leur tires dessus, le cortège se retourne contre toi. Les CRS gazent parfois les cortèges, qui se dispersent. |
 | **Émeutiers** | Cagoulés façon black bloc. Ils errent, pillent aussi et lancent des pavés ou des cocktails Molotov sur les CRS. La tenue « Cagoule » les rend beaucoup moins agressifs envers toi. Si tu portes du butin, certains t'attaquent et **volent l'objet le plus cher** puis s'enfuient : mets-les K.O. pour le récupérer. |
 | **CRS** | Patrouilles de 3 (casque, visière, épaulières, bouclier, LBD) qui convergent vers les magasins récemment pillés et vers les coups de feu. Vue en cône, ligne de vue réelle. **Le bouclier arrête les balles de face** : il faut viser la tête ou les prendre de flanc. Tirs de LBD (étourdissement), grenades lacrymogènes et de désencerclement, matraque. Être mis à terre par eux = **interpellation** (butin saisi et amende de 10 %). |
@@ -37,15 +39,14 @@ qui se connecte à un serveur distant : `https://mon-jeu/?server=https://mon-ser
 | **Échec** | K.O., interpellation ou fin du temps : le butin et les consommables emportés sont perdus et le butin reste au sol dans un sac que d'autres joueurs peuvent ramasser. L'équipement acheté est conservé. |
 | **Multijoueur** | Jusqu'à 8 joueurs par salon, PvP activé. Code à 4 lettres ou liste des parties publiques, avec arrivée en cours de raid. |
 
-**Progression** : le receleur rachète le butin. Au marché noir : armes, munitions, grenades, sacs (8 → 42 kg),
-tenues (cagoule, gilet jaune), protections, chaussures (vitesse), masque à gaz et bandages. On démarre avec un
-Makarov. Les quartiers (La Cité → Centre-ville 6 000 € → Triangle d'Or 30 000 €)
+**Progression** : le receleur rachète le butin. Au marché noir : armes (par palier), munitions, grenades, sacs
+(8 → 42 kg), tenues (cagoule, gilet jaune), protections, chaussures (vitesse), masque à gaz et bandages. Les quartiers (La Cité → Centre-ville 6 000 € → Triangle d'Or 30 000 €)
 donnent accès à de nouveaux magasins (Hi-Fi, bijouteries, luxe), à du loot plus rare et à plus de CRS.
 
 ### Contrôles
-- **PC** : ZQSD/WASD pour bouger, souris pour viser, clic gauche pour tirer, clic droit pour viser à la mire
-  ou à la lunette, R pour recharger, 1/2 ou la molette pour changer d'arme, G pour lancer, T pour choisir la
-  grenade, V pour un coup de crosse, **E maintenu** pour piller, Maj pour sprinter, C pour s'accroupir, H pour
+- **PC** : ZQSD/WASD pour bouger, souris pour viser, clic gauche pour frapper ou tirer, clic droit pour viser à
+  la mire ou à la lunette, R pour recharger, 1 (mêlée), 2 (arme principale), 3 (arme secondaire) ou la molette
+  pour changer d'arme, G pour lancer, T pour choisir le projectile, V pour un coup rapide, **E maintenu** pour piller, Maj pour sprinter, C pour s'accroupir, H pour
   un bandage, Tab pour le sac et Échap pour la pause.
 - **Mobile** : joystick à gauche, glisser à droite pour viser, boutons tir, visée, rechargement, arme,
   grenade, etc. Visée légèrement assistée.
@@ -103,7 +104,9 @@ réseau.
 
 **Armes et explosifs** : [Free CC0 Guns & Explosives Pack](https://3dmodelscc0.itch.io/free-cc0-guns-explosives-pack)
 de 3dmodelscc0 (licence CC0), dans sa conversion GLB publiée par BoQsc
-([GitHub](https://github.com/BoQsc/cc0-guns-explosives-pack-glb)). Fichiers optimisés dans
+([GitHub](https://github.com/BoQsc/cc0-guns-explosives-pack-glb)). **Mêlée** : [Free CC0 Melee Weapons Pack](https://3dmodelscc0.itch.io/free-cc0-melee-weapons-pack)
+du même auteur (barre, pied-de-biche, batte cloutée, masse ; [conversion GLB](https://github.com/BoQsc/cc0-melee-weapons-pack-glb)),
+dans `client/public/models/melee/` (46 Mo → 1,5 Mo). Le mortier d'artifice et les pierres sont générés par le code. Fichiers optimisés dans
 `client/public/models/weapons/` : **170 Mo → 3 Mo** (textures 1024 px pour les armes, 512 px pour les grenades,
 en WebP, géométrie compressée meshopt). Seuls les modèles équipés sont chargés.
 

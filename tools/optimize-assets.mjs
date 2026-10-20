@@ -18,6 +18,8 @@ const DEFAULT_TEX = Number(process.env.TEX || 512);
 const FIXES = {
   Makarov: { remove: ['Magazine'] },
   Luger: { remove: ['Clip'], rotateY: 180 },
+  // armes de mêlée : manche vers le bas, tête vers +Y
+  Crowbar: { rotateX: -90 },
 };
 
 await MeshoptEncoder.ready;
@@ -43,9 +45,10 @@ for (const f of files.sort()) {
   const doc = await io.read(f);
   const fix = FIXES[name];
   if (fix?.remove) for (const n of doc.getRoot().listNodes()) if (fix.remove.includes(n.getName())) n.dispose();
-  if (fix?.rotateY) {
+  if (fix?.rotateY || fix?.rotateX) {
     const scene = doc.getRoot().listScenes()[0];
-    const pivot = doc.createNode('pivot').setRotation([0, Math.sin((fix.rotateY * Math.PI) / 360), 0, Math.cos((fix.rotateY * Math.PI) / 360)]);
+    const a = ((fix.rotateY || fix.rotateX) * Math.PI) / 360;
+    const pivot = doc.createNode('pivot').setRotation(fix.rotateY ? [0, Math.sin(a), 0, Math.cos(a)] : [Math.sin(a), 0, 0, Math.cos(a)]);
     for (const c of scene.listChildren()) { scene.removeChild(c); pivot.addChild(c); }
     scene.addChild(pivot);
   }

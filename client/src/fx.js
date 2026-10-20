@@ -91,6 +91,8 @@ const PROJ_STYLE = {
   flash:   { color: 0x5b6b5b, s: 0.06, g: 15, bounce: 1 },
   frag:    { color: 0x3d4a2a, s: 0.07, g: 15, bounce: 1 },
   molotov: { color: 0x5a2a10, s: 0.08, g: 15, trail: [1, 0.6, 0.2] },
+  mortier: { color: 0xffd040, s: 0.07, g: 9, trail: [1, 0.75, 0.3] },
+  pierre:  { color: 0x77736c, s: 0.08, g: 16 },
 };
 const MAX_TRACERS = 48;
 
@@ -177,7 +179,7 @@ export class Fx {
     if (!p) return;
     this.scene.remove(p.mesh);
     this.proj.delete(m.id);
-    if (p.k === 'pave' || p.k === 'lbd') this.dust(m.x, m.y, m.z, 4);
+    if (p.k === 'pave' || p.k === 'lbd' || p.k === 'pierre') this.dust(m.x, m.y, m.z, 4);
   }
 
   hit(x, y, z) {
@@ -259,7 +261,7 @@ export class Fx {
       if (p.mesh.userData.model) { p.mesh.rotation.x += dt * 9 * Math.min(1, Math.hypot(p.vx, p.vz)); }
       p.mesh.position.set(p.x, p.y, p.z);
       if (p.trail) {
-        if (p.k === 'fusee') this.glow.emit(p.x, p.y, p.z, 0, 0, 0, 0.25, 0.3, p.trail[0], p.trail[1], p.trail[2], 1);
+        if (p.k === 'fusee' || p.k === 'mortier') this.glow.emit(p.x, p.y, p.z, 0, 0, 0, 0.25, 0.3, p.trail[0], p.trail[1], p.trail[2], 1);
         else this.smoke.emit(p.x, p.y, p.z, 0, 0.2, 0, 0.5, 1.2, 0.8, 0.8, 0.8, 0.5, 0.8);
       }
       if (p.y < -2) { this.scene.remove(p.mesh); this.proj.delete(p.id); }

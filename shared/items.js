@@ -89,42 +89,58 @@ export function rollItem(shop, tier, rng) {
 
 // ---------------------------------------------------------------------------
 // Équipement (achat permanent à la planque)
-// Armes : modèles du pack CC0 « Guns & Explosives » de 3dmodelscc0 (optimisés dans client/public/models/weapons).
+// Progression en 3 paliers (contacts du marché noir) :
+//   0 « Le quartier »   : armes de mêlée et pierres
+//   1 « L'artificier »  : mortiers d'artifice, lance-fusées, Molotov, fumigènes
+//   2 « Le trafiquant » : armes à feu — leur seule présence dans un raid fait intervenir le GIGN
+export const TIERS = [
+  { name: 'Le quartier', icon: '🏚️', earned: 0, desc: 'Barres, battes et pierres.' },
+  { name: "L'artificier", icon: '🎆', earned: 1500, desc: "Mortiers d'artifice, lance-fusées, Molotov et fumigènes." },
+  { name: 'Le trafiquant', icon: '🔫', earned: 12000, district: 'centre', desc: 'Armes à feu. Attention : dès qu’un pilleur est armé, la police s’équipe et le GIGN intervient.' },
+];
+
+// Modèles : armes à feu et explosifs du pack CC0 « Guns & Explosives », mêlée du pack CC0 « Melee Weapons »
+// (3dmodelscc0), optimisés dans client/public/models. « proc/... » = modèle généré par le code.
 // rpm = cadence, spread = dispersion (rad), range = portée (m), pellets = plombs (fusil à pompe)
 export const WEAPONS = {
-  makarov:   { name: 'Pistolet Makarov', icon: '🔫', slot: 'sidearm', model: 'Makarov', auto: false, dmg: 24, rpm: 320, mag: 8, reload: 1.4, ammo: 'a9', spread: 0.014, range: 60, noise: 45, price: 0, desc: 'Pistolet semi-auto, 8 coups.' },
-  luger:     { name: 'Luger P08', icon: '🔫', slot: 'sidearm', model: 'Luger', auto: false, dmg: 30, rpm: 330, mag: 8, reload: 1.5, ammo: 'a9', spread: 0.01, range: 70, noise: 45, price: 900, desc: 'Plus précis et plus puissant.' },
-  flaregun:  { name: 'Pistolet lance-fusées', icon: '🧨', slot: 'sidearm', model: 'FlareGun', auto: false, proj: 'fusee', dmg: 30, rpm: 60, mag: 1, reload: 2, ammo: 'af', speed: 34, aoe: 3, stun: 2.2, spread: 0.01, noise: 30, price: 700, desc: 'Fusée incendiaire qui étourdit en zone.' },
-  greasegun: { name: 'Grease Gun M3', icon: '🔫', slot: 'primary', model: 'Grease_Gun', auto: true, dmg: 20, rpm: 450, mag: 30, reload: 2.2, ammo: 'a9', spread: 0.035, range: 60, noise: 55, price: 2400, desc: 'Pistolet-mitrailleur, 30 coups.' },
-  suomi:     { name: 'Suomi KP/-31', icon: '🔫', slot: 'primary', model: 'Suomi_KP', auto: true, dmg: 18, rpm: 800, mag: 50, reload: 2.8, ammo: 'a9', spread: 0.04, range: 60, noise: 55, price: 4200, desc: 'Chargeur camembert de 50 coups.' },
-  shotgun:   { name: 'Fusil à pompe', icon: '🔫', slot: 'primary', model: 'Shotgun', auto: false, dmg: 13, pellets: 8, rpm: 70, mag: 6, reload: 2.8, ammo: 'a12', spread: 0.075, range: 35, noise: 65, price: 3200, desc: 'Dévastateur à courte portée.' },
-  ak47:      { name: 'AK-47', icon: '🔫', slot: 'primary', model: 'AK47', auto: true, dmg: 33, rpm: 600, mag: 30, reload: 2.4, ammo: 'a762', spread: 0.03, range: 120, noise: 75, price: 7000, desc: 'Fusil d’assaut puissant.' },
-  m4a1:      { name: 'M4A1', icon: '🔫', slot: 'primary', model: 'M4A1', auto: true, dmg: 29, rpm: 750, mag: 30, reload: 2.2, ammo: 'a762', spread: 0.022, range: 130, noise: 75, price: 9500, desc: 'Fusil d’assaut précis.' },
-  sniper:    { name: 'Fusil de précision', icon: '🎯', slot: 'primary', model: 'Sniper', auto: false, dmg: 100, rpm: 45, mag: 5, reload: 3, ammo: 'a308', spread: 0.002, range: 200, noise: 95, zoom: 4, price: 12500, desc: 'Lunette x4. Un tir, un CRS à terre.' },
+  barre:     { name: 'Barre de fer', icon: '🔧', slot: 'melee', model: 'melee/RustyPipe', melee: true, dmg: 22, range: 2.0, cd: 0.6, stun: 0.3, tier: 0, price: 0, desc: 'L’arme de base de l’émeutier.' },
+  pied_biche:{ name: 'Pied-de-biche', icon: '🪝', slot: 'melee', model: 'melee/Crowbar', melee: true, dmg: 24, range: 2.0, cd: 0.6, stun: 0.3, loot: 0.5, tier: 0, price: 350, desc: 'Force les caisses enregistreuses 2× plus vite.' },
+  batte:     { name: 'Batte cloutée', icon: '🏏', slot: 'melee', model: 'melee/NailBat', melee: true, dmg: 34, range: 2.2, cd: 0.75, stun: 0.4, tier: 0, price: 1100, desc: 'Grosse allonge, gros dégâts.' },
+  masse:     { name: 'Masse', icon: '🔨', slot: 'melee', model: 'melee/SledgeHammer', melee: true, dmg: 55, range: 2.1, cd: 1.15, stun: 0.9, tier: 1, price: 2600, desc: 'Lente, mais étourdit même un CRS.' },
+  mortier:   { name: "Mortier d'artifice", icon: '🎆', slot: 'primary', model: 'proc/mortier', auto: false, proj: 'mortier', dmg: 26, rpm: 90, mag: 3, reload: 2.4, ammo: 'am', speed: 22, aoe: 3.5, stun: 1.8, spread: 0.02, noise: 40, tier: 1, price: 1500, desc: 'Tube de 3 bombes d’artifice : explosion qui étourdit en zone.' },
+  flaregun:  { name: 'Pistolet lance-fusées', icon: '🧨', slot: 'sidearm', model: 'weapons/FlareGun', auto: false, proj: 'fusee', dmg: 30, rpm: 60, mag: 1, reload: 2, ammo: 'af', speed: 34, aoe: 3, stun: 2.2, spread: 0.01, noise: 30, tier: 1, price: 700, desc: 'Fusée incendiaire qui étourdit en zone.' },
+  makarov:   { name: 'Pistolet Makarov', icon: '🔫', slot: 'sidearm', model: 'weapons/Makarov', firearm: true, auto: false, dmg: 24, rpm: 320, mag: 8, reload: 1.4, ammo: 'a9', spread: 0.014, range: 60, noise: 45, tier: 2, price: 800, desc: 'Pistolet semi-auto, 8 coups.' },
+  luger:     { name: 'Luger P08', icon: '🔫', slot: 'sidearm', model: 'weapons/Luger', firearm: true, auto: false, dmg: 30, rpm: 330, mag: 8, reload: 1.5, ammo: 'a9', spread: 0.01, range: 70, noise: 45, tier: 2, price: 1500, desc: 'Plus précis et plus puissant.' },
+  greasegun: { name: 'Grease Gun M3', icon: '🔫', slot: 'primary', model: 'weapons/Grease_Gun', firearm: true, auto: true, dmg: 20, rpm: 450, mag: 30, reload: 2.2, ammo: 'a9', spread: 0.035, range: 60, noise: 55, tier: 2, price: 3200, desc: 'Pistolet-mitrailleur, 30 coups.' },
+  suomi:     { name: 'Suomi KP/-31', icon: '🔫', slot: 'primary', model: 'weapons/Suomi_KP', firearm: true, auto: true, dmg: 18, rpm: 800, mag: 50, reload: 2.8, ammo: 'a9', spread: 0.04, range: 60, noise: 55, tier: 2, price: 5000, desc: 'Chargeur camembert de 50 coups.' },
+  shotgun:   { name: 'Fusil à pompe', icon: '🔫', slot: 'primary', model: 'weapons/Shotgun', firearm: true, auto: false, dmg: 13, pellets: 8, rpm: 70, mag: 6, reload: 2.8, ammo: 'a12', spread: 0.075, range: 35, noise: 65, tier: 2, price: 4000, desc: 'Dévastateur à courte portée.' },
+  ak47:      { name: 'AK-47', icon: '🔫', slot: 'primary', model: 'weapons/AK47', firearm: true, auto: true, dmg: 33, rpm: 600, mag: 30, reload: 2.4, ammo: 'a762', spread: 0.03, range: 120, noise: 75, tier: 2, price: 8000, desc: 'Fusil d’assaut puissant.' },
+  m4a1:      { name: 'M4A1', icon: '🔫', slot: 'primary', model: 'weapons/M4A1', firearm: true, auto: true, dmg: 29, rpm: 750, mag: 30, reload: 2.2, ammo: 'a762', spread: 0.022, range: 130, noise: 75, tier: 2, price: 11000, desc: 'Fusil d’assaut précis.' },
+  sniper:    { name: 'Fusil de précision', icon: '🎯', slot: 'primary', model: 'weapons/Sniper', firearm: true, auto: false, dmg: 100, rpm: 45, mag: 5, reload: 3, ammo: 'a308', spread: 0.002, range: 200, noise: 95, zoom: 4, tier: 2, price: 14000, desc: 'Lunette x4. Un tir, un policier à terre.' },
 };
-export const MELEE = { name: 'Coup de crosse', dmg: 14, range: 1.8, cd: 0.6 };
+export const FIST = { name: 'Poings', dmg: 8, range: 1.6, cd: 0.45, stun: 0.15 };
 
+const NONE = (id, name) => ({ id, name, icon: '✋', price: 0, tier: 0, desc: 'Rien.' });
+const ofSlot = (slot) => Object.keys(WEAPONS).filter((id) => WEAPONS[id].slot === slot).map((id) => ({ id, ...WEAPONS[id] }));
 export const GEAR = {
-  primary: [
-    { id: 'aucune', name: 'Aucune', icon: '✋', price: 0, desc: 'Pas d’arme principale.' },
-    ...['greasegun', 'suomi', 'shotgun', 'ak47', 'm4a1', 'sniper'].map((id) => ({ id, ...WEAPONS[id] })),
+  melee: ofSlot('melee'),
+  primary: [NONE('aucune', 'Aucune'), ...ofSlot('primary')],
+  sidearm: [NONE('aucun_pa', 'Aucune'), ...ofSlot('sidearm')],
+  tenue: [
+    { id: 'survet', name: 'Survêtement', icon: '👕', price: 0, desc: 'Tenue de base.' },
+    { id: 'cagoule', name: 'Cagoule + capuche', icon: '🥷', price: 150, desc: 'Les émeutiers te prennent pour l’un des leurs : ils t’agressent beaucoup moins.' },
+    { id: 'gilet_jaune', name: 'Gilet jaune', icon: '🦺', price: 120, desc: 'Au milieu d’un cortège de gilets jaunes, la police ne te repère presque plus.' },
   ],
-  sidearm: ['makarov', 'luger', 'flaregun'].map((id) => ({ id, ...WEAPONS[id] })),
   backpack: [
     { id: 'sac_plastique', name: 'Sac plastique', icon: '🛍️', cap: 8, price: 0, desc: '8 kg de capacité.' },
     { id: 'sac_dos', name: 'Sac à dos', icon: '🎒', cap: 16, price: 450, desc: '16 kg de capacité.' },
     { id: 'sac_sport', name: 'Sac de sport', icon: '👝', cap: 26, price: 1800, desc: '26 kg de capacité.' },
     { id: 'sac_rando', name: 'Sac de randonnée 60L', icon: '🏕️', cap: 42, price: 7500, desc: '42 kg : de quoi emporter une TV.' },
   ],
-  tenue: [
-    { id: 'survet', name: 'Survêtement', icon: '👕', price: 0, desc: 'Tenue de base.' },
-    { id: 'cagoule', name: 'Cagoule + capuche', icon: '🥷', price: 150, desc: 'Les émeutiers te prennent pour l’un des leurs : ils t’agressent beaucoup moins.' },
-    { id: 'gilet_jaune', name: 'Gilet jaune', icon: '🦺', price: 120, desc: 'Au milieu d’un cortège de gilets jaunes, les CRS ne te repèrent presque plus.' },
-  ],
   armor: [
     { id: 'aucune_prot', name: 'Aucune', icon: '🧥', reduc: 0, price: 0, desc: 'Aucune protection.' },
     { id: 'casque', name: 'Casque de moto', icon: '⛑️', reduc: 0.2, price: 900, desc: '-20 % de dégâts.' },
-    { id: 'gilet', name: 'Gilet pare-balles', icon: '🦺', reduc: 0.38, price: 4200, desc: '-38 % de dégâts.' },
+    { id: 'gilet', name: 'Gilet pare-balles', icon: '🦺', reduc: 0.38, price: 4200, tier: 2, desc: '-38 % de dégâts.' },
   ],
   shoes: [
     { id: 'claquettes', name: 'Claquettes', icon: '🩴', speed: 1.0, price: 0, desc: 'Vitesse normale.' },
@@ -133,38 +149,50 @@ export const GEAR = {
   ],
   face: [
     { id: 'aucun', name: 'Rien', icon: '😶', gas: false, price: 0, desc: 'Sensible aux lacrymos.' },
-    { id: 'masque', name: 'Masque à gaz', icon: '😷', gas: true, price: 1600, desc: 'Immunité aux gaz lacrymogènes.' },
+    { id: 'masque', name: 'Masque à gaz', icon: '😷', gas: true, price: 1600, tier: 1, desc: 'Immunité aux gaz lacrymogènes.' },
   ],
 };
-export const GEAR_SLOTS = ['primary', 'sidearm', 'tenue', 'backpack', 'armor', 'shoes', 'face'];
-export const GEAR_SLOT_NAMES = { primary: 'Arme principale', sidearm: 'Arme de poing', tenue: 'Tenue', backpack: 'Sac', armor: 'Protection', shoes: 'Chaussures', face: 'Visage' };
+export const GEAR_SLOTS = ['melee', 'primary', 'sidearm', 'tenue', 'backpack', 'armor', 'shoes', 'face'];
+export const GEAR_SLOT_NAMES = { melee: 'Mêlée', primary: 'Arme principale', sidearm: 'Arme secondaire', tenue: 'Tenue', backpack: 'Sac', armor: 'Protection', shoes: 'Chaussures', face: 'Visage' };
 
 export const GEAR_BY_ID = {};
-for (const slot of GEAR_SLOTS) for (const g of GEAR[slot]) GEAR_BY_ID[g.id] = { ...g, slot };
+for (const slot of GEAR_SLOTS) for (const g of GEAR[slot]) GEAR_BY_ID[g.id] = { tier: 0, ...g, slot };
 
-// Lancer (G) : grenades et pièges du même pack
+// Lancer (G) : pierres, puis grenades et pièges
 export const THROWABLES = {
-  fumi:     { name: 'Fumigène', icon: '💨', model: 'Smoke_Grenade', desc: 'Nuage qui bloque la vue des CRS (15 s).' },
-  flash:    { name: 'Grenade aveuglante', icon: '⚡', model: 'Flashbang', desc: 'Étourdit tout le monde autour (7 m).' },
-  frag:     { name: 'Grenade', icon: '💣', model: 'FragGrenadeModel', desc: 'Explose après 2,5 s. 6 m de rayon.' },
-  molotov:  { name: 'Cocktail Molotov', icon: '🍾', model: 'Molotov_Cocktail', desc: 'Zone de feu pendant 8 s.' },
-  claymore: { name: 'Mine Claymore', icon: '🧱', model: 'Claymore', desc: 'Piège posé au sol : explose au passage.' },
+  pierre:   { name: 'Pierre', icon: '🪨', model: 'proc/pierre', tier: 0, desc: 'Un pavé arraché à la chaussée.' },
+  molotov:  { name: 'Cocktail Molotov', icon: '🍾', model: 'weapons/Molotov_Cocktail', tier: 1, desc: 'Zone de feu pendant 8 s.' },
+  fumi:     { name: 'Fumigène', icon: '💨', model: 'weapons/Smoke_Grenade', tier: 1, desc: 'Nuage qui bloque la vue de la police (15 s).' },
+  flash:    { name: 'Grenade aveuglante', icon: '⚡', model: 'weapons/Flashbang', tier: 2, desc: 'Étourdit tout le monde autour (7 m).' },
+  frag:     { name: 'Grenade', icon: '💣', model: 'weapons/FragGrenadeModel', tier: 2, desc: 'Explose après 2,5 s. 6 m de rayon.' },
+  claymore: { name: 'Mine Claymore', icon: '🧱', model: 'weapons/Claymore', tier: 2, desc: 'Piège posé au sol : explose au passage.' },
 };
-export const THROW_ORDER = ['fumi', 'flash', 'frag', 'molotov', 'claymore'];
+export const THROW_ORDER = ['pierre', 'molotov', 'fumi', 'flash', 'frag', 'claymore'];
+export const FREE_STONES = 15; // on trouve toujours des pierres sur place
 
 export const CONSUMABLES = {
-  bandage:  { name: 'Bandage', icon: '🩹', price: 40, pack: 1, max: 10, desc: 'Soigne 35 PV en 3 s.' },
-  a9:       { name: 'Munitions 9 mm', icon: '🟡', price: 40, pack: 30, max: 300, desc: 'Pistolets et pistolets-mitrailleurs (x30).' },
-  a762:     { name: 'Munitions de fusil', icon: '🟠', price: 120, pack: 30, max: 240, desc: 'AK-47 et M4A1 (x30).' },
-  a12:      { name: 'Cartouches cal. 12', icon: '🔴', price: 80, pack: 12, max: 72, desc: 'Fusil à pompe (x12).' },
-  a308:     { name: 'Balles .308', icon: '🟤', price: 150, pack: 10, max: 50, desc: 'Fusil de précision (x10).' },
-  af:       { name: 'Fusées', icon: '🎇', price: 90, pack: 3, max: 15, desc: 'Pistolet lance-fusées (x3).' },
-  fumi:     { name: 'Fumigène', icon: '💨', price: 120, pack: 1, max: 5, desc: THROWABLES.fumi.desc },
-  flash:    { name: 'Grenade aveuglante', icon: '⚡', price: 180, pack: 1, max: 5, desc: THROWABLES.flash.desc },
-  frag:     { name: 'Grenade', icon: '💣', price: 350, pack: 1, max: 5, desc: THROWABLES.frag.desc },
-  molotov:  { name: 'Cocktail Molotov', icon: '🍾', price: 90, pack: 1, max: 5, desc: THROWABLES.molotov.desc },
-  claymore: { name: 'Mine Claymore', icon: '🧱', price: 400, pack: 1, max: 3, desc: THROWABLES.claymore.desc },
+  bandage:  { name: 'Bandage', icon: '🩹', price: 40, pack: 1, max: 10, tier: 0, desc: 'Soigne 35 PV en 3 s.' },
+  pierre:   { name: 'Pierres', icon: '🪨', price: 15, pack: 10, max: 40, tier: 0, desc: `En plus des ${FREE_STONES} trouvées sur place à chaque raid (x10).` },
+  am:       { name: "Bombes d'artifice", icon: '🎆', price: 90, pack: 6, max: 36, tier: 1, desc: 'Munitions du mortier (x6).' },
+  af:       { name: 'Fusées', icon: '🎇', price: 90, pack: 3, max: 15, tier: 1, desc: 'Pistolet lance-fusées (x3).' },
+  molotov:  { name: 'Cocktail Molotov', icon: '🍾', price: 90, pack: 1, max: 5, tier: 1, desc: THROWABLES.molotov.desc },
+  fumi:     { name: 'Fumigène', icon: '💨', price: 120, pack: 1, max: 5, tier: 1, desc: THROWABLES.fumi.desc },
+  a9:       { name: 'Munitions 9 mm', icon: '🟡', price: 40, pack: 30, max: 300, tier: 2, desc: 'Pistolets et pistolets-mitrailleurs (x30).' },
+  a762:     { name: 'Munitions de fusil', icon: '🟠', price: 120, pack: 30, max: 240, tier: 2, desc: 'AK-47 et M4A1 (x30).' },
+  a12:      { name: 'Cartouches cal. 12', icon: '🔴', price: 80, pack: 12, max: 72, tier: 2, desc: 'Fusil à pompe (x12).' },
+  a308:     { name: 'Balles .308', icon: '🟤', price: 150, pack: 10, max: 50, tier: 2, desc: 'Fusil de précision (x10).' },
+  flash:    { name: 'Grenade aveuglante', icon: '⚡', price: 180, pack: 1, max: 5, tier: 2, desc: THROWABLES.flash.desc },
+  frag:     { name: 'Grenade', icon: '💣', price: 350, pack: 1, max: 5, tier: 2, desc: THROWABLES.frag.desc },
+  claymore: { name: 'Mine Claymore', icon: '🧱', price: 400, pack: 1, max: 3, tier: 2, desc: THROWABLES.claymore.desc },
 };
+
+// Palier atteint selon les gains cumulés et les quartiers débloqués
+export function tierLevel(stats, unlocked) {
+  let lvl = 0;
+  TIERS.forEach((t, i) => { if ((stats.earned || 0) >= t.earned && (!t.district || unlocked[t.district])) lvl = i; });
+  return lvl;
+}
+export const hasFirearm = (lo) => ['primary', 'sidearm'].some((s) => WEAPONS[lo[s]]?.firearm);
 
 // Valide le loadout envoyé par un client (le serveur ne fait pas confiance aux ids).
 export function sanitizeLoadout(lo = {}) {

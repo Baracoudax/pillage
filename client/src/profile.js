@@ -1,5 +1,5 @@
 // Profil persistant (argent, planque, équipement, quartiers débloqués). Sauvegarde locale.
-import { GEAR, GEAR_SLOTS, CONSUMABLES, ITEMS, GEAR_BY_ID } from '../../shared/items.js';
+import { GEAR, GEAR_SLOTS, CONSUMABLES, ITEMS, GEAR_BY_ID, TIERS, tierLevel, FREE_STONES } from '../../shared/items.js';
 import { DISTRICTS } from '../../shared/config.js';
 
 const KEY = 'pillage.profile.v1';
@@ -28,7 +28,7 @@ export class Profile {
     for (const s of GEAR_SLOTS) {
       for (const g of GEAR[s]) if (!g.price) this.d.owned[g.id] = true;
       const g = GEAR_BY_ID[this.d.equipped[s]];
-      if (!g || g.slot !== s || !this.d.owned[g.id]) this.d.equipped[s] = GEAR[s][0].id;
+      if (!g || g.slot !== s || !this.d.owned[g.id] || g.tier > this.tier()) this.d.equipped[s] = GEAR[s][0].id;
     }
     for (const k in CONSUMABLES) this.d.cons[k] = Math.max(0, Math.min(CONSUMABLES[k].max, Number(this.d.cons[k]) || 0));
     for (const k in this.d.cons) if (!CONSUMABLES[k]) delete this.d.cons[k];
@@ -36,11 +36,19 @@ export class Profile {
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.d)); } catch { /* ignore */ } }
   reset() { this.d = fresh(); this.save(); }
 
-  loadout() { return { ...this.d.equipped, cons: { ...this.d.cons } }; }
+  // palier du marché noir (0 : mêlée/pierres, 1 : artifices, 2 : armes à feu)
+  tier() { return tierLevel(this.d.stats, this.d.unlocked); }
+  nextTier() { const t = this.tier() + 1; return t < TIERS.length ? { i: t, ...TIERS[t] } : null; }
+
+  loadout() {
+    const cons = { ...this.d.cons };
+    cons.pierre = (cons.pierre || 0) + FREE_STONES;
+    return { ...this.d.equipped, cons };
+  }
 
   buyGear(id) {
     const g = GEAR_BY_ID[id];
-    if (!g || this.d.owned[id] || this.d.money < g.price) return false;
+    if (!g || this.d.owned[id] || this.d.money < g.price || g.tier > this.tier()) return false;
     this.d.money -= g.price;
     this.d.owned[id] = true;
     this.d.equipped[g.slot] = id;
@@ -49,13 +57,13 @@ export class Profile {
   }
   equip(id) {
     const g = GEAR_BY_ID[id];
-    if (!g || !this.d.owned[id]) return;
+    if (!g || !this.d.owned[id] || g.tier > this.tier()) return;
     this.d.equipped[g.slot] = id;
     this.save();
   }
   buyCons(k) {
     const c = CONSUMABLES[k];
-    if (this.d.money < c.price || this.d.cons[k] + c.pack > c.max) return false;
+    if (this.d.money < c.price || this.d.cons[k] + c.pack > c.max || c.tier > this.tier()) return false;
     this.d.money -= c.price;
     this.d.cons[k] += c.pack;
     this.save();
@@ -106,8 +114,8 @@ export class Profile {
   }
   raidFail(reason) {
     let fine = 0;
-    if (reason === 'arrest') {
-      fine = Math.min(this.d.money, Math.max(100, Math.round(this.d.money * 0.1)));
+    if (reason === 'arrest' || reason === 'gign') {
+      fine = Math.min(this.d.money, Math.max(100, Math.round(this.d.money * (reason === 'gign' ? 0.25 : 0.1))));
       this.d.money -= fine;
       this.d.stats.arrests++;
     }

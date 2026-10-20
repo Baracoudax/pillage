@@ -53,8 +53,8 @@ for (const did of DISTRICT_ORDER) {
   const ms = performance.now() - t1;
   console.log(`${did}: map ${map.size}m gen ${tGen.toFixed(0)}ms, shops ${map.shops.length}, loot ${map.lootSpots.length}, solids ${map.solids.length}`);
   console.log(`  ${steps} ticks en ${ms.toFixed(0)}ms (${(ms / steps).toFixed(3)} ms/tick), npcs ${w.npcs.length}, heat ${w.heat.toFixed(0)}`);
-  const kinds = [0, 1, 2].map((k) => w.npcs.filter((n) => n.kind === k).length);
-  console.log(`  PNJ émeutiers/CRS/GJ: ${kinds.join('/')}, cortèges ${w.corteges.length}, munitions ${stats.ammo0} -> ${p.ammo.a762 + p.mag.primary}, PNJ à terre ${w.npcs.filter((n) => n.st === 'down').length}`);
+  const kinds = [0, 1, 2, 3].map((k) => w.npcs.filter((n) => n.kind === k).length);
+  console.log(`  PNJ émeutiers/CRS/GJ/GIGN: ${kinds.join('/')}, cortèges ${w.corteges.length}, munitions ${stats.ammo0} -> ${p.ammo.a762 + p.mag.primary}, PNJ à terre ${w.npcs.filter((n) => n.st === 'down').length}`);
   console.log(`  résultat: ${result ? result.t + ' ' + (result.reason || '') + ' ' + (result.value ?? '') + '€' : 'aucun'}, snap moyen ${(snapBytes / nSnaps).toFixed(0)} o`, JSON.stringify(msgs));
 }
 
@@ -83,4 +83,18 @@ for (const did of DISTRICT_ORDER) {
   const spottedAlone = crs.mode === 'chase' || !w.los(crs.x, crs.z, p.x, p.z);
   console.log(`cortège : crowd=${crowd} repéré dans la foule=${spottedInCrowd} repéré seul=${spottedAlone}`);
   if (crowd !== 2 || spottedInCrowd || !spottedAlone) { console.error('ÉCHEC test cortège'); process.exitCode = 1; }
+}
+
+// --- Escalade : sans arme à feu, pas de GIGN ; avec, le GIGN arrive après les premiers tirs
+for (const armed of [false, true]) {
+  const w = new World('cite', { seed: 5 });
+  const p = w.addPlayer(1, 'x', armed ? { primary: 'ak47', cons: { a762: 90 } } : { primary: 'mortier', cons: { am: 12 } }, () => {});
+  p.hp = p.maxHp = 1e9;
+  for (let i = 0; i < 20 * 60; i++) {
+    if (i % 20 === 0) { w.onMessage(1, { t: 'act', a: 'fire', yaw: 0, pitch: 0.3 }); if (i % 200 === 0) w.onMessage(1, { t: 'act', a: 'reload' }); }
+    w.step();
+  }
+  const gign = w.npcs.filter((n) => n.kind === 3).length;
+  console.log(`${armed ? 'avec' : 'sans'} arme à feu : GIGN sur zone = ${gign}, tirs ${w.gunShots}`);
+  if (armed ? gign < 4 : gign > 0) { console.error('ÉCHEC test escalade'); process.exitCode = 1; }
 }

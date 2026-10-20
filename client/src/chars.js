@@ -30,6 +30,7 @@ const PARTS = {
   sign:    { geo: part(0.62, 0.42, 0.03, 0, -1.25, 0.05), pivot: [0.32, 1.43, 0] },
   pole:    { geo: part(0.04, 1.0, 0.04, 0, -0.7, 0.05), pivot: [0.32, 1.43, 0] },
   pack:    { geo: part(0.4, 0.46, 0.22, 0, 0.32, -0.24), pivot: [0, 0.85, 0] },
+  tacvest: { geo: part(0.52, 0.46, 0.33, 0, 0.36, 0), pivot: [0, 0.85, 0] },
   stick:   { geo: part(0.06, 0.06, 0.75, 0, -0.58, 0.3), pivot: [0.32, 1.43, 0] },
 };
 
@@ -48,6 +49,10 @@ export function appearance(kind, id, extra = {}) {
   const pick = (arr, s) => arr[(h >>> s) % arr.length];
   if (kind === 'crs') {
     return { torso: 0x1a2130, legs: 0x141923, arm: 0x1a2130, head: 0x1e2533, helmet: 0x1f2738, visor: 0x0d1118, pads: 0x2c3446, shield: 0x9fb0c2, lbd: 0x23262b, aim: true };
+  }
+  if (kind === 'gign') {
+    // noir intégral, cagoule, casque à lunettes, gilet tactique, fusil d'assaut
+    return { torso: 0x101114, legs: 0x0e0f12, arm: 0x101114, head: 0x0b0b0b, eyes: 0x6a5040, helmet: 0x15171b, visor: 0x2b3a30, pads: 0x1a1c20, tacvest: 0x262a22, gun: true };
   }
   if (kind === 'gj') {
     const shirt = pick(CASUAL, 1);
@@ -138,6 +143,7 @@ export class CharacterRenderer {
       }
     }
     if (look.pack) this.put('pack', look.pack, torso);
+    if (look.tacvest) this.put('tacvest', look.tacvest, torso);
     // bras : balancement, visée, frappe, lancer, pancarte
     let ar = -sw * 0.8, al = sw * 0.8;
     const armed = look.aim || look.gun;

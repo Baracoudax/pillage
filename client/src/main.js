@@ -6,7 +6,7 @@ import { Profile } from './profile.js';
 import { Raid } from './raid.js';
 import { LocalTransport, NetTransport } from './net.js';
 import { DISTRICTS, DISTRICT_ORDER, SHOP_TYPES } from '../../shared/config.js';
-import { ITEMS, RARITY, GEAR, GEAR_SLOTS, GEAR_SLOT_NAMES, GEAR_BY_ID, CONSUMABLES } from '../../shared/items.js';
+import { ITEMS, RARITY, GEAR, GEAR_SLOTS, GEAR_SLOT_NAMES, GEAR_BY_ID, CONSUMABLES, TIERS } from '../../shared/items.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString('fr-FR') + ' €';
@@ -71,15 +71,26 @@ function render() {
     ['Meilleur butin', fmt(st.best)], ['Gains totaux', fmt(st.earned)], ['Interpellations', st.arrests],
   ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
 
-  // marché noir
-  $('shop').innerHTML = GEAR_SLOTS.map((s) => `<div class="slot"><h3>${GEAR_SLOT_NAMES[s]}</h3><div class="gear">${GEAR[s].map((g) => {
-    const own = d.owned[g.id], eq = d.equipped[s] === g.id;
-    const btn = eq ? '<button disabled>Équipé</button>' : own ? `<button data-equip="${g.id}">Équiper</button>`
+  // marché noir : contacts (paliers), puis équipement
+  const lvl = profile.tier();
+  const lockBtn = (t) => `<button disabled>🔒 Contact : ${TIERS[t].name}</button>`;
+  const contacts = `<div class="tiers">${TIERS.map((t, i) => {
+    const ok = i <= lvl;
+    const pct = Math.min(100, (d.stats.earned / Math.max(1, t.earned)) * 100);
+    const need = [t.earned ? `${fmt(Math.min(d.stats.earned, t.earned))} / ${fmt(t.earned)} revendus` : '', t.district && !d.unlocked[t.district] ? `quartier ${DISTRICTS[t.district].name} à débloquer` : ''].filter(Boolean).join(' · ');
+    return `<div class="tier ${ok ? 'ok' : ''}"><b>${t.icon} ${t.name}</b><span>${t.desc}</span>
+      ${ok ? '<em>Disponible</em>' : `<div class="prog"><div style="width:${pct}%"></div></div><small>${need}</small>`}</div>`;
+  }).join('')}</div>`;
+  $('shop').innerHTML = contacts + GEAR_SLOTS.map((s) => `<div class="slot"><h3>${GEAR_SLOT_NAMES[s]}</h3><div class="gear">${GEAR[s].map((g0) => {
+    const g = GEAR_BY_ID[g0.id];
+    const own = d.owned[g.id], eq = d.equipped[s] === g.id, locked = g.tier > lvl;
+    const btn = locked ? lockBtn(g.tier) : eq ? '<button disabled>Équipé</button>' : own ? `<button data-equip="${g.id}">Équiper</button>`
       : `<button class="primary" data-buy="${g.id}" ${d.money < g.price ? 'disabled' : ''}>Acheter · ${fmt(g.price)}</button>`;
-    return `<div class="${eq ? 'eq' : ''}"><span class="n">${g.icon} ${g.name}</span><span class="d">${g.desc}</span>${btn}</div>`;
+    return `<div class="${eq ? 'eq' : ''} ${locked ? 'lock' : ''}"><span class="n">${g.icon} ${g.name}${g.firearm ? ' <small class="fa">arme à feu</small>' : ''}</span><span class="d">${g.desc}</span>${btn}</div>`;
   }).join('')}</div></div>`).join('') +
     `<div class="slot"><h3>Munitions, grenades et soins (perdus si tu tombes)</h3><div class="gear">${Object.keys(CONSUMABLES).map((k) => {
       const c = CONSUMABLES[k];
+      if (c.tier > lvl) return `<div class="lock"><span class="n">${c.icon} ${c.name}</span><span class="d">${c.desc}</span>${lockBtn(c.tier)}</div>`;
       return `<div><span class="n">${c.icon} ${c.name} <small>· ${d.cons[k]}/${c.max}</small></span><span class="d">${c.desc}</span>
         <button class="primary" data-cons="${k}" ${d.money < c.price || d.cons[k] + c.pack > c.max ? 'disabled' : ''}>Acheter · ${fmt(c.price)}</button></div>`;
     }).join('')}</div></div>`;
@@ -193,6 +204,7 @@ async function refreshRooms() {
 // ---------------------------------------------------------------- fin de raid
 const REASONS = {
   arrest: ['🚔 Interpellé !', 'Les CRS t\'ont arrêté. Butin saisi'],
+  gign: ['🎯 Neutralisé par le GIGN', 'Le GIGN t\'a interpellé. Butin et armes saisis'],
   ko: ['💥 K.O.', 'Un émeutier t\'a mis à terre et a fait les poches'],
   pvp: ['💥 K.O.', 'Un autre pilleur t\'a eu'],
   timeout: ['⏱ Trop tard', 'Le quartier est bouclé : tu es coincé'],

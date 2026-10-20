@@ -47,7 +47,24 @@ export class ViewModel {
     g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
     const b = m.box, cx = (b.min.x + b.max.x) / 2;
     const long = w.slot === 'primary';
-    if (long) {
+    this.isMelee = !!w.melee;
+    if (w.melee) {
+      // arme de mêlée tenue dans la main droite, tête vers le haut et vers l'avant
+      this.hip.set(0.24, -0.3, -0.48);
+      this.ads.copy(this.hip);
+      g.rotation.set(-0.75, 0.2, 0.3);
+      this.gun = g;
+      this.holder.add(g);
+      this.scope = false;
+      this.flash.visible = false;
+      return;
+    }
+    g.rotation.set(0, 0, 0);
+    if (w.proj === 'mortier') {
+      // tube tenu à bout de bras, incliné vers le haut
+      this.hip.set(0.22 - cx, -0.2, -0.34 - b.max.z);
+      this.ads.set(0.06 - cx, -0.15, -0.3 - b.max.z);
+    } else if (long) {
       this.hip.set(0.13 - cx, -0.1 - b.max.y, 0.02 - b.max.z);
       this.ads.set(-cx, -b.max.y + 0.004, 0.1 - b.max.z);
     } else {
@@ -106,12 +123,18 @@ export class ViewModel {
     }
     if (this.meleeT > 0) {
       this.meleeT -= dt;
-      const r = Math.sin((1 - this.meleeT / 0.35) * Math.PI);
-      ry -= r * 0.9; h.position.z -= r * 0.15; h.position.x -= r * 0.08;
+      const k2 = 1 - Math.max(0, this.meleeT) / 0.35;
+      const r = Math.sin(k2 * Math.PI);
+      if (this.isMelee) {
+        // armement puis frappe en diagonale
+        const wind = k2 < 0.3 ? k2 / 0.3 : 1 - (k2 - 0.3) / 0.7;
+        rx += wind * 0.5 - (k2 > 0.3 ? Math.sin(((k2 - 0.3) / 0.7) * Math.PI) * 1.4 : 0);
+        rz += r * 0.6; h.position.x -= r * 0.22; h.position.y += wind * 0.08;
+      } else { ry -= r * 0.9; h.position.z -= r * 0.15; h.position.x -= r * 0.08; }
     }
     h.rotation.set(rx, ry, rz);
     this.flashT -= dt;
-    this.flash.visible = this.flashT > 0;
+    this.flash.visible = this.flashT > 0 && !this.isMelee;
     if (this.throwMesh) {
       this.throwT -= dt;
       const t = 1 - Math.max(0, this.throwT) / 0.55;

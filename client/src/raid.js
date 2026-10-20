@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { getMap } from '../../shared/map.js';
 import { PLAYER, SHOP_TYPES } from '../../shared/config.js';
 import { ITEMS, RARITY, GEAR_BY_ID, WEAPONS, THROWABLES, THROW_ORDER, invValue, holdTime } from '../../shared/items.js';
-import { F, NPC_CRS, NPC_GJ } from '../../shared/world.js';
+import { F, NPC_CRS, NPC_GJ, NPC_GIGN } from '../../shared/world.js';
 import { CityView } from './cityView.js';
 import { CharacterRenderer, appearance } from './chars.js';
 import { Fx } from './fx.js';
@@ -15,7 +15,7 @@ const SEND_DT = 0.05;
 const FOV = 75;
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
-const AMMO_NAMES = { a9: '9 mm', a762: 'fusil', a12: 'cal. 12', a308: '.308', af: 'fusées' };
+const AMMO_NAMES = { a9: '9 mm', a762: 'fusil', a12: 'cal. 12', a308: '.308', af: 'fusées', am: 'bombes' };
 
 class Interp {
   constructor() { this.buf = []; }
@@ -52,7 +52,7 @@ export class Raid {
     this.exits = welcome.exits;
     this.lo = app.raidLoadout;
     this.speedMult = GEAR_BY_ID[this.lo.shoes].speed;
-    this.wp = { primary: WEAPONS[this.lo.primary] ? this.lo.primary : null, sidearm: this.lo.sidearm };
+    this.wp = { melee: WEAPONS[this.lo.melee] ? this.lo.melee : null, primary: WEAPONS[this.lo.primary] ? this.lo.primary : null, sidearm: WEAPONS[this.lo.sidearm] ? this.lo.sidearm : null };
 
     const scene = (this.scene = new THREE.Scene());
     const fogC = 0x1b1820;
@@ -87,11 +87,11 @@ export class Raid {
 
     this.me = {
       x: welcome.x, z: welcome.z, rot: 0, hp: PLAYER.hp, stamina: PLAYER.stamina, inv: [], w: 0, cap: welcome.cap,
-      stun: 0, gas: 0, ex: 0, ammo: {}, thr: {}, mg: { primary: 0, sidearm: 0 }, cur: this.wp.primary ? 'primary' : 'sidearm', rl: 0, cr: 0,
+      stun: 0, gas: 0, ex: 0, ammo: {}, thr: {}, mg: { primary: 0, sidearm: 0 }, cur: this.wp.primary ? 'primary' : this.wp.sidearm ? 'sidearm' : 'melee', rl: 0, cr: 0,
       band: this.lo.cons.bandage, phase: 0, moving: false, sprint: false, crouch: false,
     };
     this.local = { mg: null, lastShot: -9, fireU: 0, meleeU: 0, throwU: 0, reloadEnd: 0, reloadDur: 1 };
-    this.throwSel = THROW_ORDER.find((k) => this.lo.cons[k] > 0) || 'fumi';
+    this.throwSel = 'pierre';
     this.cam = { yaw: Math.PI / 4, pitch: 0, recoil: 0, bob: 0, eye: 1.6 };
     this.players = new Map();
     this.names = new Map(welcome.players);
@@ -117,9 +117,10 @@ export class Raid {
 
   // précharge les modèles nécessaires (appelé avant d'afficher le raid)
   static preload(lo) {
-    const list = [lo.primary, lo.sidearm].filter((w) => WEAPONS[w]).map((w) => weaponPath(WEAPONS[w].model));
+    const list = [lo.melee, lo.primary, lo.sidearm].filter((w) => WEAPONS[w]).map((w) => weaponPath(WEAPONS[w].model));
+    list.push('proc/pierre', 'melee/PoliceBaton', 'weapons/M4A1');
     for (const k of THROW_ORDER) if (lo.cons[k] > 0) list.push(weaponPath(THROWABLES[k].model));
-    list.push(weaponPath('Claymore'));
+    list.push('weapons/Claymore');
     return Promise.all(list.map(loadModel));
   }
 
@@ -131,7 +132,9 @@ export class Raid {
     $('invPanel').classList.remove('on');
     $('pause').classList.remove('on');
     this.toast(`Raid : ${this.map.d.name}. Pille, puis rejoins une sortie verte.`, 'info', 4500);
-    this.toast('Les tirs s’entendent de loin : chaque coup de feu attire les CRS.', 'warn', 6000);
+    if (this.wp.primary && WEAPONS[this.wp.primary].firearm || this.wp.sidearm && WEAPONS[this.wp.sidearm].firearm) {
+      this.toast('Tu es armé : chaque coup de feu attire la police et fera intervenir le GIGN.', 'danger', 6000);
+    } else this.toast('G : lancer une pierre · T : changer de projectile', 'info', 6000);
     $('invList').onclick = (e) => {
       const b = e.target.closest('[data-drop]');
       if (b) this.tr.send({ t: 'act', a: 'drop', i: Number(b.dataset.drop) });
@@ -232,9 +235,10 @@ export class Raid {
     $('wFill').style.width = Math.min(100, (me.w / me.cap) * 100) + '%';
     $('vTxt').textContent = `${invValue(me.inv)} €`;
     const w = this.weapon;
-    $('weaponTxt').textContent = w ? w.name : 'Mains nues';
-    $('magTxt').textContent = w ? this.magShown() : '–';
-    $('resTxt').textContent = w ? `/ ${me.ammo[w.ammo] ?? 0} ${AMMO_NAMES[w.ammo]}` : '';
+    const ranged = w && !w.melee;
+    $('weaponTxt').textContent = w ? w.name : 'Poings';
+    $('magTxt').textContent = ranged ? this.magShown() : '';
+    $('resTxt').textContent = ranged ? `/ ${me.ammo[w.ammo] ?? 0} ${AMMO_NAMES[w.ammo]}` : '';
     $('reloadTxt').classList.toggle('on', me.rl > 0);
     const th = THROWABLES[this.throwSel];
     $('throwTxt').textContent = `${th.icon} ${th.name} x${me.thr[this.throwSel] ?? 0}`;
@@ -293,7 +297,7 @@ export class Raid {
         for (const [id, kind, x, z, rot, f] of m.n) {
           let n = this.npcs.get(id);
           if (!n) {
-            const k = kind === NPC_CRS ? 'crs' : kind === NPC_GJ ? 'gj' : 'rioter';
+            const k = kind === NPC_CRS ? 'crs' : kind === NPC_GJ ? 'gj' : kind === NPC_GIGN ? 'gign' : 'rioter';
             n = { id, kind, it: new Interp(), phase: Math.random() * 6, look: appearance(k, id) };
             this.npcs.set(id, n);
           }
@@ -339,7 +343,7 @@ export class Raid {
       case 'fx': {
         const d = Math.hypot(m.x - this.me.x, m.z - this.me.z);
         if (m.k === 'hit') { this.fx.hit(m.x, m.y, m.z); this.audio.play('hit', d); }
-        else if (m.k === 'boom' || m.k === 'flare') { this.fx.boom(m.x, m.y, m.z); this.audio.play('boom', d); this.shake = Math.max(this.shake || 0, Math.max(0, 0.5 - d / 40)); }
+        else if (m.k === 'boom' || m.k === 'flare' || m.k === 'firework') { this.fx.boom(m.x, m.y, m.z); this.audio.play('boom', d); this.shake = Math.max(this.shake || 0, Math.max(0, 0.5 - d / 40)); }
         else if (m.k === 'gas') { this.fx.addGas(m.x, m.z, m.r, m.ttl); this.audio.play('gas', d); }
         else if (m.k === 'smoke') { this.fx.addSmoke(m.x, m.z, m.r, m.ttl); this.audio.play('gas', d); }
         else if (m.k === 'fire') { this.fx.addFire(m.x, m.z, m.r, m.ttl); this.audio.play('glass', d); }
@@ -391,8 +395,11 @@ export class Raid {
       }
       case 'stolen': this.toast(`Un émeutier t'a volé : ${ITEMS[m.item].icon} ${ITEMS[m.item].name} ! Rattrape-le !`, 'warn', 3500); break;
       case 'aggro': this.toast('Un émeutier en veut à ton butin !', 'warn'); break;
-      case 'spotted': if (now - (this._spot || 0) > 6) { this._spot = now; this.toast('Repéré par les CRS !', 'danger'); this.audio.play('spotted'); } break;
+      case 'spotted': if (now - (this._spot || 0) > 6) { this._spot = now; this.toast(m.g ? 'Repéré par le GIGN !' : 'Repéré par les CRS !', 'danger'); this.audio.play('spotted'); } break;
       case 'sirene': this.toast('Renforts de CRS en approche', 'danger'); this.audio.play('sirene'); break;
+      case 'armed': this.toast('Pilleurs armés signalés : la police renforce ses effectifs et s’équipe.', 'danger', 5000); this.audio.play('sirene'); break;
+      case 'gign': this.toast(`Coups de feu signalés ! Le GIGN est appelé (arrivée dans ~${m.eta} s).`, 'danger', 6000); this.audio.play('sirene'); break;
+      case 'gignon': this.toast('Le GIGN est sur zone. Ils tirent à balles réelles.', 'danger', 5000); this.audio.play('spotted'); break;
       case 'heal': this.toast('Soin en cours…'); break;
       case 'kill': this.toast(`Tu as mis ${m.name} K.O.`, 'loot'); break;
       case 'pout': this.toast(`${m.name} s'est extrait`); break;
@@ -469,7 +476,7 @@ export class Raid {
     const rgtX = -fwdZ, rgtZ = fwdX;
     const dx = fwdX * my + rgtX * mx, dz = fwdZ * my + rgtZ * mx;
     const moving = ml > 0.1 && me.stun <= 0;
-    const wantAds = inp.ads && !!w && me.rl <= 0;
+    const wantAds = inp.ads && !!w && !w.melee && me.rl <= 0;
     me.sprint = moving && inp.sprint && !inp.crouch && me.stamina > 1 && my > 0.3 && !wantAds;
     me.stamina = Math.max(0, Math.min(PLAYER.stamina, me.stamina + (me.sprint ? -PLAYER.staminaDrain : PLAYER.staminaRegen) * dt));
     if (moving) {
@@ -488,10 +495,14 @@ export class Raid {
 
     // changement d'arme
     let sw = null;
+    if (inp.pressed.has('melee_slot')) sw = 'melee';
     if (inp.pressed.has('primary')) sw = 'primary';
     if (inp.pressed.has('sidearm')) sw = 'sidearm';
-    if (inp.pressed.has('swap')) sw = me.cur === 'primary' ? 'sidearm' : 'primary';
-    if (sw && sw !== me.cur && this.wp[sw]) {
+    if (inp.pressed.has('swap')) {
+      const order = ['primary', 'sidearm', 'melee'].filter((s) => s === 'melee' || this.wp[s]);
+      sw = order[(order.indexOf(me.cur) + 1) % order.length];
+    }
+    if (sw && sw !== me.cur && (sw === 'melee' || this.wp[sw])) {
       me.cur = sw;
       this._switchT = now;
       this.local.mg = null;
@@ -499,13 +510,20 @@ export class Raid {
       this.vm.setWeapon(this.wp[sw]);
       this.tr.send({ t: 'act', a: 'switch', s: sw });
     }
-    if (inp.pressed.has('reload') && w && me.mg[me.cur] < w.mag && (me.ammo[w.ammo] ?? 0) > 0) {
+    if (inp.pressed.has('reload') && w && !w.melee && me.mg[me.cur] < w.mag && (me.ammo[w.ammo] ?? 0) > 0) {
       this.tr.send({ t: 'act', a: 'reload' });
       this.audio.play('reload');
     }
 
+    // mêlée (arme en main) : on peut maintenir le clic
+    if ((!w || w.melee) && inp.held.has('fire') && now >= this.local.meleeU && me.stun <= 0) {
+      this.local.meleeU = now + (w ? w.cd : 0.45);
+      this.vm.melee();
+      this.audio.play('swing');
+      this.tr.send({ t: 'act', a: 'fire', yaw: this.cam.yaw, pitch: this.cam.pitch });
+    }
     // tir
-    const trigger = w && (w.auto ? inp.held.has('fire') : inp.pressed.has('fire'));
+    const trigger = w && !w.melee && (w.auto ? inp.held.has('fire') : inp.pressed.has('fire'));
     if (trigger && now >= this.local.fireU && me.stun <= 0 && me.rl <= 0 && !me.sprint) {
       // plusieurs tirs par image si l'appareil est lent (la cadence ne dépend pas des FPS)
       if (this.magShown() > 0) {
@@ -523,7 +541,7 @@ export class Raid {
       }
     }
     if (inp.pressed.has('melee') && now >= this.local.meleeU) {
-      this.local.meleeU = now + 0.6;
+      this.local.meleeU = now + (WEAPONS[this.wp.melee]?.cd || 0.6);
       this.vm.melee();
       this.audio.play('swing');
       this.tr.send({ t: 'act', a: 'melee', yaw: this.cam.yaw });
@@ -537,7 +555,7 @@ export class Raid {
     }
     if (inp.pressed.has('throw') && now >= this.local.throwU) {
       if ((me.thr[this.throwSel] ?? 0) > 0) {
-        this.local.throwU = now + 0.9;
+        this.local.throwU = now + (this.throwSel === 'pierre' ? 0.55 : 0.9);
         this.vm.throwAnim(this.throwSel);
         this.audio.play('swing');
         this.tr.send({ t: 'act', a: 'throw', k: this.throwSel, yaw: this.cam.yaw, pitch: this.cam.pitch });
@@ -560,7 +578,7 @@ export class Raid {
     this.vm.fire(w.pellets ? 2 : w.zoom ? 2.5 : 1);
     this.fx.flash(me.x + Math.sin(yaw) * 0.8, this.cam.eye, me.z + Math.cos(yaw) * 0.8, 0xffb060, 0.05);
     const kick = (w.pellets ? 0.06 : w.zoom ? 0.07 : w.slot === 'sidearm' ? 0.028 : 0.018) * (this.ads ? 0.6 : 1);
-    this.cam.recoil += kick;
+    this.cam.recoil += w.proj === 'mortier' ? 0.05 : kick;
     this.cam.yaw += (Math.random() - 0.5) * kick * 0.5;
     this.audio.play(w.slot === 'sidearm' && !w.proj ? 'pistol' : w.pellets ? 'shotgun' : w.proj ? 'flare' : w.zoom ? 'sniper' : 'rifle');
     if (w.proj) return;
@@ -598,7 +616,9 @@ export class Raid {
     const tgt = this.findTarget();
     const prompt = $('prompt');
     if (tgt) {
-      const holdNeeded = tgt.bag ? 0.4 : holdTime(tgt.item);
+      // le pied-de-biche force les caisses plus vite
+      const lootMult = holdTime(tgt.item || '') >= 2 ? (WEAPONS[this.wp.melee]?.loot || 1) : 1;
+      const holdNeeded = tgt.bag ? 0.4 : holdTime(tgt.item) * lootMult;
       const heavy = !tgt.bag && me.w + ITEMS[tgt.item].w > me.cap + 1e-6;
       const key = this.app.input.touch ? '' : '[E] ';
       prompt.innerHTML = tgt.bag ? `${key}Fouiller le sac` :
@@ -667,7 +687,14 @@ export class Raid {
       const w = WEAPONS[wid];
       const m = w && getModel(weaponPath(w.model));
       if (!m) { if (w) loadModel(weaponPath(w.model)); return; }
-      const obj = m.scene.clone();
+      let obj = m.scene.clone();
+      if (w.melee) {
+        // arme de mêlée verticale (+Y) -> réorientée comme une arme à feu (-Z)
+        const wrap = new THREE.Group();
+        obj.rotation.x = -Math.PI / 2; obj.position.z = 0.1;
+        wrap.add(obj);
+        obj = wrap;
+      }
       obj.matrixAutoUpdate = false;
       this.scene.add(obj);
       g = { wid, obj };
@@ -691,14 +718,14 @@ export class Raid {
       if (s.f & F.MOVE) p.phase += dt * (s.f & F.RUN ? 14 : 9);
       const key = s.pack + s.tenue;
       if (!p.look || p.lookKey !== key) { p.look = appearance('player', p.id, { pack: s.pack, tenue: s.tenue }); p.lookKey = key; }
-      p.look.gun = !!s.wid;
+      p.look.gun = !!s.wid && !WEAPONS[s.wid]?.melee;
       const hand = this.chars.draw({ x: s.x, z: s.z, rot: s.rot, phase: p.phase, moving: s.f & F.MOVE, run: s.f & F.RUN, crouch: s.f & F.CROUCH, down: s.f & F.DOWN, attack: s.f & F.ATTACK ? 0.6 : 0, stun: s.f & F.STUN, throw: 0, aim: -(s.pitch || 0) * 0.8 }, p.look);
       if (s.wid && !(s.f & F.DOWN)) this.remoteGun(p.id, s.wid, hand);
       if (p.shotT && now - p.shotT < 0.05) this.fx.flash(s.x + Math.sin(s.rot) * 0.8, 1.45, s.z + Math.cos(s.rot) * 0.8, 0xffc080, 0.06);
       this.label(p.id, s.x, s.z, s.f & F.DOWN);
     }
     for (const id of this.labels.keys()) if (!this.players.has(id)) { this.scene.remove(this.labels.get(id)); this.labels.delete(id); }
-    for (const [id, g] of this.remoteGuns) if (!this.players.has(id)) { this.scene.remove(g.obj); this.remoteGuns.delete(id); }
+    for (const [id, g] of this.remoteGuns) if (typeof id === 'number' && !this.players.has(id)) { this.scene.remove(g.obj); this.remoteGuns.delete(id); }
     for (const n of this.npcs.values()) {
       const s = n.it.sample(rt);
       if (!s) continue;
@@ -706,8 +733,10 @@ export class Raid {
       if (s.f & F.MOVE) n.phase += dt * (s.f & F.RUN ? 13 : 7);
       if (s.f & F.ATTACK) n.atk = 1; else n.atk = Math.max(0, (n.atk || 0) - dt * 4);
       if (s.f & F.THROW) n.thr = 1; else n.thr = Math.max(0, (n.thr || 0) - dt * 3);
-      this.chars.draw({ x: s.x, z: s.z, rot: s.rot, phase: n.phase, moving: s.f & F.MOVE, run: s.f & F.RUN, crouch: false, down: s.f & F.DOWN, attack: n.atk, stun: s.f & F.STUN, throw: n.thr }, n.look);
+      const hand = this.chars.draw({ x: s.x, z: s.z, rot: s.rot, phase: n.phase, moving: s.f & F.MOVE, run: s.f & F.RUN, crouch: false, down: s.f & F.DOWN, attack: n.kind === NPC_GIGN ? 0 : n.atk, stun: s.f & F.STUN, throw: n.thr }, n.look);
+      if (n.kind === NPC_GIGN && !(s.f & F.DOWN)) this.remoteGun('n' + n.id, 'm4a1', hand);
     }
+    for (const [id, g] of this.remoteGuns) if (typeof id === 'string' && !this.npcs.has(Number(id.slice(1)))) { this.scene.remove(g.obj); this.remoteGuns.delete(id); }
     this.chars.end();
 
     // caméra à la première personne
