@@ -79,9 +79,31 @@ h2 { font-size: 16px; margin: 18px 0 8px; display: flex; gap: 10px; align-items:
 #dmgDir div { position: absolute; left: -40px; top: -150px; width: 80px; height: 26px; border-radius: 50% 50% 0 0; background: #ff2020aa; }
 #dmgDir.on { animation: fade 1s forwards; }
 @keyframes fade { from { opacity: 1; } to { opacity: 0; } }
-#crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #0008; opacity: .85; }
-#crosshair.hit { animation: hitm .25s; }
-@keyframes hitm { 0% { transform: scale(3); background: #ff4040; } 100% { transform: scale(1); } }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transition: opacity .1s; }
+#crosshair i { position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+#crosshair i:nth-child(1) { left: -1px; top: -14px; width: 2px; height: 8px; }
+#crosshair i:nth-child(2) { left: -1px; top: 6px; width: 2px; height: 8px; }
+#crosshair i:nth-child(3) { top: -1px; left: -14px; width: 8px; height: 2px; }
+#crosshair i:nth-child(4) { top: -1px; left: 6px; width: 8px; height: 2px; }
+#crosshair.ads { opacity: 0; }
+#hitmark { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; opacity: 0;
+  background: linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%), linear-gradient(-45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%); }
+#hitmark.on { animation: hitm .25s; }
+#hitmark.hs { filter: drop-shadow(0 0 2px red) hue-rotate(0deg); background-color: transparent; }
+#hitmark.hs.on { animation: hitm .35s; }
+@keyframes hitm { 0% { opacity: 1; transform: scale(1.4); } 100% { opacity: 0; transform: scale(1); } }
+#flashOverlay { position: absolute; inset: 0; background: #fff; opacity: 0; }
+#scope { position: absolute; inset: 0; display: none; background: radial-gradient(circle at center, transparent 0, transparent 34vmin, #000 34.3vmin); }
+#scope.on { display: block; }
+#scope div { position: absolute; left: 50%; top: 50%; width: 68vmin; height: 68vmin; transform: translate(-50%, -50%);
+  background: linear-gradient(#000, #000) center/100% 1px no-repeat, linear-gradient(#000, #000) center/1px 100% no-repeat; }
+#crowd { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); display: none; background: #2e3a00cc; color: #e9ff6a; padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+#crowd.on { display: block; } #crowd.best { background: #4a5c00ee; color: #fff; }
+.br { position: absolute; right: 14px; bottom: 14px; bottom: max(14px, env(safe-area-inset-bottom)); text-align: right; text-shadow: 0 2px 3px #000; }
+#weaponTxt { font-size: 13px; color: #ddd; }
+.ammo b { font-size: 34px; font-weight: 800; } .ammo span { font-size: 14px; color: #ccc; margin-left: 6px; }
+#reloadTxt { display: none; color: #ffd43b; font-size: 12px; font-weight: 700; } #reloadTxt.on { display: block; }
+.br .row-s { justify-content: flex-end; }
 #lockHint { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); background: #000a; padding: 8px 14px; border-radius: 8px; display: none; }
 #lockHint.on { display: block; }
 .tl { position: absolute; left: 12px; top: 12px; top: max(12px, env(safe-area-inset-top)); width: 230px; display: flex; flex-direction: column; gap: 5px; }
@@ -128,15 +150,20 @@ h2 { font-size: 16px; margin: 18px 0 8px; display: flex; gap: 10px; align-items:
 .stick { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 2px solid #fff4; background: #0003; display: none; }
 .stick.show { display: block; }
 .knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: #fff5; }
-.btns { position: absolute; right: 14px; bottom: 18px; bottom: max(18px, env(safe-area-inset-bottom)); width: 220px; height: 220px; }
+.btns { position: absolute; right: 14px; bottom: 18px; bottom: max(18px, env(safe-area-inset-bottom)); width: 260px; height: 300px; }
 .btns button { position: absolute; width: 58px; height: 58px; border-radius: 50%; font-size: 24px; background: #0007; border: 2px solid #fff4; padding: 0; }
 .btns button.down { background: #fff4; }
 .btns .big { width: 84px; height: 84px; right: 0; bottom: 0; font-size: 34px; }
-#btnUse { right: 92px; bottom: 6px; } #btnUse.ready { border-color: #ffd43b; background: #ffd43b44; }
-.btns [data-act=sprint] { right: 8px; bottom: 94px; }
-.btns [data-act=crouch] { right: 74px; bottom: 74px; }
-.btns [data-act=heal] { right: 150px; bottom: 30px; width: 48px; height: 48px; font-size: 20px; }
-.btns [data-act=inv] { right: 100px; bottom: 140px; width: 48px; height: 48px; font-size: 20px; }
+#btnUse { right: 92px; bottom: 4px; } #btnUse.ready { border-color: #ffd43b; background: #ffd43b44; }
+.btns .b-ads { right: 12px; bottom: 96px; } .btns .b-ads.active { background: #ff6b1a88; }
+.btns .b-rl { right: 80px; bottom: 72px; width: 50px; height: 50px; font-size: 20px; }
+.btns .b-sw { right: 160px; bottom: 10px; width: 50px; height: 50px; font-size: 20px; }
+.btns .b-th { right: 138px; bottom: 74px; width: 50px; height: 50px; font-size: 20px; }
+.btns .b-sp { right: 20px; bottom: 166px; width: 50px; height: 50px; font-size: 20px; }
+.btns .b-cr { right: 86px; bottom: 136px; width: 50px; height: 50px; font-size: 20px; }
+.btns .b-he { right: 200px; bottom: 120px; width: 44px; height: 44px; font-size: 18px; }
+.btns .b-in { right: 150px; bottom: 150px; width: 44px; height: 44px; font-size: 18px; }
+@media (pointer: coarse) { .br { bottom: auto; top: 175px; right: 8px; } .ammo b { font-size: 24px; } #crowd { top: 64px; } }
 #touch .mini { position: fixed; right: 172px; top: 12px; top: max(12px, env(safe-area-inset-top)); width: 38px; height: 38px; font-size: 16px; }
 @media (pointer: coarse) {
   #crosshair { opacity: .5; }
@@ -166,4 +193,17 @@ h2 { font-size: 16px; margin: 18px 0 8px; display: flex; gap: 10px; align-items:
   #toasts { top: 175px; max-width: 52vw; }
   .toast { font-size: 11px; padding: 4px 7px; }
   .logo { font-size: 24px; }
+}
+/* mobile : munitions en bas à gauche, boutons compacts */
+@media (pointer: coarse) {
+  .br { top: auto; right: auto; left: 64px; bottom: 10px; bottom: max(10px, env(safe-area-inset-bottom)); text-align: left; }
+  .br .row-s { justify-content: flex-start; }
+  #toasts { max-width: 46vw; }
+  .toast { font-size: 11px; }
+}
+@media (pointer: coarse) and (max-height: 500px) {
+  .btns { transform: scale(0.78); transform-origin: bottom right; }
+  #exits, #fps { display: none; }
+  .tl { width: 170px; }
+  .bar span { font-size: 10px; }
 }

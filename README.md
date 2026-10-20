@@ -1,6 +1,6 @@
 # PILLAGE — nuit d'émeutes
 
-Extraction shooter 3D jouable dans le navigateur (PC, mobile, tablette), en **solo** et en **multijoueur**.
+Extraction shooter **FPS** 3D jouable dans le navigateur (PC, mobile, tablette), en **solo** et en **multijoueur**.
 Tu pilles des magasins pendant une nuit d'émeutes. Tu évites les émeutiers qui veulent ton butin et les CRS
 qui veulent t'interpeller, tu rejoins une sortie, puis tu revends le butin au receleur pour acheter du
 meilleur équipement et débloquer des quartiers plus riches.
@@ -28,23 +28,27 @@ qui se connecte à un serveur distant : `https://mon-jeu/?server=https://mon-ser
 |---|---|
 | **Raid** | 8 à 10 min. On apparaît dans le quartier, on pille, on rejoint l'une des 3 sorties (la 3e ouvre plus tard). Rester 6 s dans la zone verte. |
 | **Loot** | Objets en rayon (couleur = rareté) et caisses enregistreuses, plus longues à vider. Chaque objet a un poids : le sac limite ce qu'on emporte. |
-| **Émeutiers** | Ils errent, pillent aussi et lancent des pavés sur les CRS. Si tu portes du butin, certains t'attaquent et **volent l'objet le plus cher** puis s'enfuient : mets-les K.O. pour le récupérer. |
-| **CRS** | Patrouilles de 3 qui convergent vers les magasins récemment pillés. Vue en cône, ligne de vue réelle. Tirs de LBD (étourdissement), grenades lacrymogènes, matraque. Être mis à terre par eux = **interpellation** (butin saisi et amende de 10 %). |
+| **Armes (FPS)** | Pistolets (Makarov, Luger, lance-fusées), PM (Grease Gun, Suomi), fusil à pompe, AK-47, M4A1, fusil de précision à lunette. Visée (clic droit), recul, rechargement, tirs à la tête. Grenades : fumigène (bloque la vue des CRS), aveuglante, à fragmentation, cocktail Molotov, mine Claymore. **Chaque coup de feu s'entend et attire les CRS.** |
+| **Gilets jaunes** | Des cortèges défilent de carrefour en carrefour et se rassemblent au rond-point occupé (cercle jaune sur la minimap). Au milieu d'un cortège, la distance de détection des CRS est fortement réduite ; avec la tenue « Gilet jaune », tu deviens presque invisible. Si tu leur tires dessus, le cortège se retourne contre toi. Les CRS gazent parfois les cortèges, qui se dispersent. |
+| **Émeutiers** | Cagoulés façon black bloc. Ils errent, pillent aussi et lancent des pavés ou des cocktails Molotov sur les CRS. La tenue « Cagoule » les rend beaucoup moins agressifs envers toi. Si tu portes du butin, certains t'attaquent et **volent l'objet le plus cher** puis s'enfuient : mets-les K.O. pour le récupérer. |
+| **CRS** | Patrouilles de 3 (casque, visière, épaulières, bouclier, LBD) qui convergent vers les magasins récemment pillés et vers les coups de feu. Vue en cône, ligne de vue réelle. **Le bouclier arrête les balles de face** : il faut viser la tête ou les prendre de flanc. Tirs de LBD (étourdissement), grenades lacrymogènes et de désencerclement, matraque. Être mis à terre par eux = **interpellation** (butin saisi et amende de 10 %). |
 | **Tension** | Monte avec le temps, le pillage et les attaques contre les CRS. Plus elle est haute, plus il y a de renforts. |
 | **Discrétion** | S'accroupir réduit fortement la distance de détection. Le sprint consomme de l'endurance. |
 | **Échec** | K.O., interpellation ou fin du temps : le butin et les consommables emportés sont perdus et le butin reste au sol dans un sac que d'autres joueurs peuvent ramasser. L'équipement acheté est conservé. |
 | **Multijoueur** | Jusqu'à 8 joueurs par salon, PvP activé. Code à 4 lettres ou liste des parties publiques, avec arrivée en cours de raid. |
 
-**Progression** : le receleur rachète le butin. Au marché noir : sacs (8 → 42 kg), armes (barre de fer,
-batte, lance-pierre, mortier d'artifice qui étourdit en zone), protections, chaussures (vitesse), masque à
-gaz, bandages et munitions. Les quartiers (La Cité → Centre-ville 6 000 € → Triangle d'Or 30 000 €)
+**Progression** : le receleur rachète le butin. Au marché noir : armes, munitions, grenades, sacs (8 → 42 kg),
+tenues (cagoule, gilet jaune), protections, chaussures (vitesse), masque à gaz et bandages. On démarre avec un
+Makarov. Les quartiers (La Cité → Centre-ville 6 000 € → Triangle d'Or 30 000 €)
 donnent accès à de nouveaux magasins (Hi-Fi, bijouteries, luxe), à du loot plus rare et à plus de CRS.
 
 ### Contrôles
-- **PC** : ZQSD/WASD pour bouger, souris pour la caméra, clic gauche pour frapper ou tirer, clic droit/V pour
-  un coup de poing, **E maintenu** pour piller, Maj pour sprinter, C pour s'accroupir, H/1 pour un bandage,
-  Tab pour le sac (jeter des objets) et Échap pour la pause.
-- **Mobile** : joystick à gauche, glisser à droite pour la caméra, boutons d'action. Visée assistée.
+- **PC** : ZQSD/WASD pour bouger, souris pour viser, clic gauche pour tirer, clic droit pour viser à la mire
+  ou à la lunette, R pour recharger, 1/2 ou la molette pour changer d'arme, G pour lancer, T pour choisir la
+  grenade, V pour un coup de crosse, **E maintenu** pour piller, Maj pour sprinter, C pour s'accroupir, H pour
+  un bandage, Tab pour le sac et Échap pour la pause.
+- **Mobile** : joystick à gauche, glisser à droite pour viser, boutons tir, visée, rechargement, arme,
+  grenade, etc. Visée légèrement assistée.
 
 ## Architecture
 
@@ -59,7 +63,9 @@ client/src/
   main.js     menus (planque, marché noir, quartiers, multi) et boucle principale
   raid.js     prédiction locale, interpolation, caméra, interactions, HUD et minimap
   cityView.js géométrie statique de la ville (fusionnée)
-  chars.js    personnages instanciés
+  chars.js    personnages instanciés (émeutiers cagoulés, CRS, gilets jaunes)
+  viewmodel.js arme en main à la 1re personne (scène dédiée, recul, visée, rechargement)
+  assets.js   chargement des .glb (meshopt + WebP)
   fx.js       particules, projectiles et lumières
   gfx.js      renderer, presets de qualité et résolution dynamique
   net.js      LocalTransport (solo) / NetTransport (WebSocket), même interface
@@ -93,7 +99,19 @@ réseau.
 - Les shaders sont précompilés pendant l'écran de chargement. Les sons sont synthétisés en WebAudio
   (0 fichier audio).
 
-## Intégration des assets
+## Assets 3D
+
+**Armes et explosifs** : [Free CC0 Guns & Explosives Pack](https://3dmodelscc0.itch.io/free-cc0-guns-explosives-pack)
+de 3dmodelscc0 (licence CC0), dans sa conversion GLB publiée par BoQsc
+([GitHub](https://github.com/BoQsc/cc0-guns-explosives-pack-glb)). Fichiers optimisés dans
+`client/public/models/weapons/` : **170 Mo → 3 Mo** (textures 1024 px pour les armes, 512 px pour les grenades,
+en WebP, géométrie compressée meshopt). Seuls les modèles équipés sont chargés.
+
+Pour (ré)optimiser des modèles : `node tools/optimize-assets.mjs <dossier_source> <dossier_sortie> Nom=1024 ...`.
+`tools/inspect-glb.mjs` et `tools/list-nodes.mjs` permettent d'inspecter un fichier, et `npm run dev` puis
+`/dev/viewer.html` affiche une planche de vignettes.
+
+## Intégration des autres assets
 
 Le prototype utilise des formes géométriques provisoires. Pour brancher de vrais assets, le format idéal :
 

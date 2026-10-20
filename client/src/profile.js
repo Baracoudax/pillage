@@ -10,7 +10,7 @@ function fresh() {
   return {
     name: 'Casseur' + Math.floor(Math.random() * 900 + 100),
     money: 300, stash: [], equipped, owned,
-    cons: { bandage: 2, bille: 0, fusee: 0 },
+    cons: { ...Object.fromEntries(Object.keys(CONSUMABLES).map((k) => [k, 0])), bandage: 2, a9: 24, fumi: 1 },
     unlocked: { cite: true },
     stats: { raids: 0, extracts: 0, best: 0, earned: 0, arrests: 0 },
     settings: { quality: 'auto', sens: 1, volume: 0.7 },
@@ -24,7 +24,14 @@ export class Profile {
     this.d = Object.assign(fresh(), data || {});
     this.d.settings = Object.assign(fresh().settings, this.d.settings);
     this.d.stash = this.d.stash.filter((id) => ITEMS[id]);
-    for (const s of GEAR_SLOTS) if (!GEAR_BY_ID[this.d.equipped[s]]) this.d.equipped[s] = GEAR[s][0].id;
+    // migration des anciennes sauvegardes : équipement gratuit toujours possédé, slots valides
+    for (const s of GEAR_SLOTS) {
+      for (const g of GEAR[s]) if (!g.price) this.d.owned[g.id] = true;
+      const g = GEAR_BY_ID[this.d.equipped[s]];
+      if (!g || g.slot !== s || !this.d.owned[g.id]) this.d.equipped[s] = GEAR[s][0].id;
+    }
+    for (const k in CONSUMABLES) this.d.cons[k] = Math.max(0, Math.min(CONSUMABLES[k].max, Number(this.d.cons[k]) || 0));
+    for (const k in this.d.cons) if (!CONSUMABLES[k]) delete this.d.cons[k];
   }
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.d)); } catch { /* ignore */ } }
   reset() { this.d = fresh(); this.save(); }
@@ -86,12 +93,12 @@ export class Profile {
     // les consommables partent avec le joueur : perdus s'il tombe
     this.d.stats.raids++;
     this.carried = { ...this.d.cons };
-    this.d.cons = { bandage: 0, bille: 0, fusee: 0 };
+    this.d.cons = Object.fromEntries(Object.keys(CONSUMABLES).map((k) => [k, 0]));
     this.save();
   }
   raidExtract(items, cons) {
     this.d.stash.push(...items);
-    for (const k in cons) this.d.cons[k] = Math.min(CONSUMABLES[k].max, (this.d.cons[k] || 0) + (cons[k] || 0));
+    for (const k in cons) if (CONSUMABLES[k]) this.d.cons[k] = Math.min(CONSUMABLES[k].max, (this.d.cons[k] || 0) + (cons[k] || 0));
     this.d.stats.extracts++;
     const v = items.reduce((s, id) => s + ITEMS[id].value, 0);
     this.d.stats.best = Math.max(this.d.stats.best, v);

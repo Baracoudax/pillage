@@ -55,6 +55,14 @@ export class Audio {
       case 'hit': this.noiseBurst(0.15, 500, 1.5, 0.7 * a); this.tone(90, 0.12, 0.4 * a, 'square', -40); break;
       case 'hurt': this.tone(160, 0.25, 0.3, 'sawtooth', -90); break;
       case 'shoot': this.noiseBurst(0.08, 2500, 2, 0.4 * a); this.tone(300, 0.08, 0.15 * a, 'square', -200); break;
+      case 'pistol': this.noiseBurst(0.12, 1400, 0.8, 0.9 * a); this.tone(160, 0.08, 0.35 * a, 'square', -100); break;
+      case 'rifle': this.noiseBurst(0.16, 900, 0.6, 1.1 * a); this.tone(110, 0.1, 0.45 * a, 'square', -60); break;
+      case 'shotgun': this.noiseBurst(0.3, 500, 0.5, 1.3 * a, 'lowpass'); this.tone(80, 0.2, 0.5 * a, 'sawtooth', -40); break;
+      case 'sniper': this.noiseBurst(0.45, 700, 0.4, 1.4 * a); this.tone(70, 0.3, 0.5 * a, 'square', -30); break;
+      case 'flare': this.noiseBurst(0.35, 2500, 0.5, 0.6 * a, 'highpass'); break;
+      case 'reload': this.tone(900, 0.04, 0.12, 'square'); setTimeout(() => this.tone(600, 0.05, 0.12, 'square'), 380); break;
+      case 'empty': this.tone(1800, 0.02, 0.1, 'square'); break;
+      case 'hitmark': this.tone(2200, 0.04, 0.08, 'triangle'); break;
       case 'lbd': this.noiseBurst(0.18, 900, 0.7, 0.9 * a); break;
       case 'boom': this.noiseBurst(0.9, 200, 0.5, 1.2 * a, 'lowpass'); this.tone(60, 0.6, 0.6 * a, 'sine', -30); break;
       case 'gas': this.noiseBurst(1.4, 3000, 0.3, 0.25 * a, 'highpass'); break;

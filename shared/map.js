@@ -123,6 +123,15 @@ export class CityMap {
       this.spawnPoints.push({ x: c, z: m }, { x: m, z: c });
     }
 
+    // rond-point occupé par les gilets jaunes : carrefour intérieur, feux de palettes aux angles
+    const inner = this.spawnPoints.slice(0, Math.max(1, (n - 1) * (n - 1)));
+    this.roundabout = inner[Math.floor(rng() * inner.length)];
+    this.clearProps(this.roundabout.x, this.roundabout.z, 7);
+    for (const [a, b] of [[-4.5, -4.5], [4.5, 4.5]]) this.fires.push({ x: this.roundabout.x + a, z: this.roundabout.z + b, s: 0.8 });
+    // étapes des cortèges : tous les carrefours
+    this.marchPoints = [];
+    for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) this.marchPoints.push({ x: i * PERIOD + STREET / 2, z: j * PERIOD + STREET / 2 });
+
     this.buildHash();
     this.buildGrid();
   }
@@ -347,6 +356,28 @@ export class CityMap {
         if (tmin > tmax) continue;
       }
       if (tmin < best) best = tmin;
+    }
+    return best;
+  }
+
+  // Rayon 3D contre les boîtes (sol compris). Retourne la distance du premier impact (<= maxT).
+  ray3(ox, oy, oz, dx, dy, dz, maxT) {
+    let best = maxT;
+    if (dy < -1e-6) best = Math.min(best, -oy / dy);
+    const ex = ox + dx * best, ez = oz + dz * best;
+    for (const s of this.query(Math.min(ox, ex), Math.min(oz, ez), Math.max(ox, ex), Math.max(oz, ez))) {
+      let t0 = 0, t1 = best;
+      const ax = [[ox, dx, s.x0, s.x1], [oy, dy, 0, s.h], [oz, dz, s.z0, s.z1]];
+      let hit = true;
+      for (const [o, d, lo, hi] of ax) {
+        if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { hit = false; break; } continue; }
+        let a = (lo - o) / d, b = (hi - o) / d;
+        if (a > b) [a, b] = [b, a];
+        if (a > t0) t0 = a;
+        if (b < t1) t1 = b;
+        if (t0 > t1) { hit = false; break; }
+      }
+      if (hit && t0 < best) best = t0;
     }
     return best;
   }

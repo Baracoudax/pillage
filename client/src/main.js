@@ -52,7 +52,7 @@ function render() {
   $('loadout').innerHTML = GEAR_SLOTS.map((s) => {
     const g = GEAR_BY_ID[d.equipped[s]];
     return `<div><small>${GEAR_SLOT_NAMES[s]}</small>${g.icon} ${g.name}</div>`;
-  }).join('') + Object.keys(CONSUMABLES).map((k) => `<div><small>${CONSUMABLES[k].name}</small>${CONSUMABLES[k].icon} x${d.cons[k]}</div>`).join('');
+  }).join('') + Object.keys(CONSUMABLES).filter((k) => d.cons[k] > 0).map((k) => `<div><small>${CONSUMABLES[k].name}</small>${CONSUMABLES[k].icon} x${d.cons[k]}</div>`).join('');
 
   // planque
   const counts = {};
@@ -78,7 +78,7 @@ function render() {
       : `<button class="primary" data-buy="${g.id}" ${d.money < g.price ? 'disabled' : ''}>Acheter · ${fmt(g.price)}</button>`;
     return `<div class="${eq ? 'eq' : ''}"><span class="n">${g.icon} ${g.name}</span><span class="d">${g.desc}</span>${btn}</div>`;
   }).join('')}</div></div>`).join('') +
-    `<div class="slot"><h3>Consommables (perdus si tu tombes)</h3><div class="gear">${Object.keys(CONSUMABLES).map((k) => {
+    `<div class="slot"><h3>Munitions, grenades et soins (perdus si tu tombes)</h3><div class="gear">${Object.keys(CONSUMABLES).map((k) => {
       const c = CONSUMABLES[k];
       return `<div><span class="n">${c.icon} ${c.name} <small>· ${d.cons[k]}/${c.max}</small></span><span class="d">${c.desc}</span>
         <button class="primary" data-cons="${k}" ${d.money < c.price || d.cons[k] + c.pack > c.max ? 'disabled' : ''}>Acheter · ${fmt(c.price)}</button></div>`;
@@ -114,7 +114,9 @@ $('btnReset').onclick = () => { if (confirm('Effacer toute ta progression ?')) {
 // ---------------------------------------------------------------- lancement
 function showLoading(v) { $('loading').classList.toggle('on', v); }
 
-function startRaid(transport, welcome, code) {
+async function startRaid(transport, welcome, code) {
+  showLoading(true);
+  try { await Raid.preload(app.raidLoadout); } catch { /* modèles manquants : formes de secours */ }
   profile.raidStart();
   profile.d.lastDistrict = district;
   profile.save();
@@ -134,8 +136,9 @@ $('btnSolo').onclick = () => {
   audio.init();
   showLoading(true);
   // on laisse le navigateur afficher l'écran de chargement avant la génération
+  app.raidLoadout = profile.loadout();
   setTimeout(() => {
-    const tr = new LocalTransport(district, profile.d.name, profile.loadout());
+    const tr = new LocalTransport(district, profile.d.name, app.raidLoadout);
     const i = tr.queue.findIndex((m) => m.t === 'welcome');
     const welcome = tr.queue.splice(i, 1)[0];
     startRaid(tr, welcome, null);
@@ -148,13 +151,14 @@ async function startMulti(msg) {
   const net = new NetTransport();
   try {
     await net.open();
-    net.send({ ...msg, name: profile.d.name, loadout: profile.loadout() });
+    app.raidLoadout = profile.loadout();
+    net.send({ ...msg, name: profile.d.name, loadout: app.raidLoadout });
     const r = await net.waitFor(['room', 'error']);
     if (r.t === 'error') throw new Error(r.msg);
     const welcome = await net.waitFor(['welcome', 'error']);
     if (welcome.t === 'error') throw new Error(welcome.msg);
     district = welcome.district;
-    startRaid(net, welcome, r.code);
+    await startRaid(net, welcome, r.code);
   } catch (e) {
     net.close();
     showLoading(false);

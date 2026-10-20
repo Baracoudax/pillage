@@ -1,5 +1,7 @@
 // Particules (feu, fumée, gaz, étincelles), projectiles et pool de lumières dynamiques.
 import * as THREE from 'three';
+import { THROWABLES } from '../../shared/items.js';
+import { getModel, weaponPath } from './assets.js';
 
 const VERT = `
 attribute float size;
@@ -80,12 +82,17 @@ class Particles {
 }
 
 const PROJ_STYLE = {
-  bille: { color: 0xcccccc, s: 0.07, g: 4 },
-  lbd:   { color: 0x111111, s: 0.09, g: 2.5 },
-  pave:  { color: 0x777777, s: 0.18, g: 16 },
-  fusee: { color: 0xff3df0, s: 0.12, g: 9, trail: [1, 0.4, 0.9] },
-  gaz:   { color: 0x9fa69a, s: 0.11, g: 14, trail: [0.8, 0.8, 0.8] },
+  lbd:     { color: 0x111111, s: 0.09, g: 2.5 },
+  pave:    { color: 0x777777, s: 0.18, g: 16 },
+  fusee:   { color: 0xff3020, s: 0.1, g: 6, trail: [1, 0.35, 0.15] },
+  gaz:     { color: 0x9fa69a, s: 0.11, g: 14, trail: [0.8, 0.8, 0.8] },
+  desenc:  { color: 0x2a2f3a, s: 0.08, g: 15 },
+  fumi:    { color: 0x6b7b5b, s: 0.07, g: 15, bounce: 1 },
+  flash:   { color: 0x5b6b5b, s: 0.06, g: 15, bounce: 1 },
+  frag:    { color: 0x3d4a2a, s: 0.07, g: 15, bounce: 1 },
+  molotov: { color: 0x5a2a10, s: 0.08, g: 15, trail: [1, 0.6, 0.2] },
 };
+const MAX_TRACERS = 48;
 
 export class Fx {
   constructor(scene, q, map) {
@@ -110,24 +117,67 @@ export class Fx {
     }
     this.fireT = 0;
     this.lightT = 0;
+    this.smokes = [];
+    this.tempFires = [];
+    // traçantes : un seul LineSegments pour toutes les balles
+    this.trPos = new Float32Array(MAX_TRACERS * 6);
+    this.trCol = new Float32Array(MAX_TRACERS * 6);
+    this.trLife = new Float32Array(MAX_TRACERS);
+    this.trI = 0;
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.BufferAttribute(this.trPos, 3).setUsage(THREE.DynamicDrawUsage));
+    tg.setAttribute('color', new THREE.BufferAttribute(this.trCol, 3).setUsage(THREE.DynamicDrawUsage));
+    this.tracers = new THREE.LineSegments(tg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.tracers.frustumCulled = false;
+    scene.add(this.tracers);
+  }
+
+  tracer(x0, y0, z0, x1, y1, z1) {
+    const i = this.trI;
+    this.trI = (i + 1) % MAX_TRACERS;
+    // segment court qui part un peu devant l'arme
+    const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0, L = Math.hypot(dx, dy, dz) || 1;
+    const a = Math.min(1.2, L * 0.3) / L;
+    this.trPos.set([x0 + dx * a, y0 + dy * a, z0 + dz * a, x1, y1, z1], i * 6);
+    this.trLife[i] = 0.07;
+  }
+
+  impact(x, y, z, kind) {
+    if (kind === 1) {
+      for (let i = 0; i < 6; i++) this.smoke.emit(x, y, z, (Math.random() - 0.5) * 1.5, Math.random(), (Math.random() - 0.5) * 1.5, 0.18, 0.35, 0.45, 0.04, 0.04, 0.8, 0.3);
+    } else {
+      const n = kind === 2 ? 10 : 4;
+      for (let i = 0; i < n; i++) this.glow.emit(x, y, z, (Math.random() - 0.5) * 5, Math.random() * 3, (Math.random() - 0.5) * 5, 0.06, 0.18, 1, 0.85, 0.5, 1, 0, -9);
+      if (kind !== 2) this.dust(x, y, z, 2);
+    }
+  }
+
+  addSmoke(x, z, r, ttl) { this.smokes.push({ x, z, r, ttl }); }
+  addFire(x, z, r, ttl) { this.tempFires.push({ x, z, s: r * 0.5, ttl }); }
+  bigFlash(x, y, z) {
+    this.glow.emit(x, y, z, 0, 0, 0, 7, 0.2, 1, 1, 1, 1, 10);
+    for (let i = 0; i < 25; i++) this.glow.emit(x, y, z, (Math.random() - 0.5) * 8, Math.random() * 5, (Math.random() - 0.5) * 8, 0.1, 0.4, 1, 1, 0.9, 1, 0, -8);
+    this.flash(x, y + 0.5, z, 0xffffff, 0.15);
   }
 
   setScale(h, fov) { const s = h / (2 * Math.tan((fov * Math.PI) / 360)); this.glow.mat.uniforms.scale.value = s; this.smoke.mat.uniforms.scale.value = s; }
 
   addProj(m) {
-    const st = PROJ_STYLE[m.k] || PROJ_STYLE.bille;
-    const mesh = new THREE.Mesh(this.projGeo, this.projMats[m.k]);
-    mesh.scale.setScalar(st.s);
+    const st = PROJ_STYLE[m.k] || PROJ_STYLE.lbd;
+    const model = THROWABLES[m.k] && getModel(weaponPath(THROWABLES[m.k].model));
+    let mesh;
+    if (model) { mesh = model.scene.clone(); mesh.userData.model = true; }
+    else { mesh = new THREE.Mesh(this.projGeo, this.projMats[m.k]); mesh.scale.setScalar(st.s); }
     mesh.position.set(m.x, m.y, m.z);
     this.scene.add(mesh);
-    this.proj.set(m.id, { ...m, mesh, g: st.g, trail: st.trail });
+    this.proj.set(m.id, { ...m, mesh, g: st.g, trail: st.trail, bounce: st.bounce });
   }
   endProj(m) {
     const p = this.proj.get(m.id);
     if (!p) return;
     this.scene.remove(p.mesh);
     this.proj.delete(m.id);
-    if (p.k === 'pave' || p.k === 'bille' || p.k === 'lbd') this.dust(m.x, m.y, m.z, 4);
+    if (p.k === 'pave' || p.k === 'lbd') this.dust(m.x, m.y, m.z, 4);
   }
 
   hit(x, y, z) {
@@ -150,7 +200,9 @@ export class Fx {
   addGas(x, z, r, ttl) { this.gas.push({ x, z, r, ttl }); }
   flash(x, y, z, color, t) { this.flashes.push({ x, y, z, color, t, t0: t }); }
 
-  update(dt, cam, fires) {
+  update(dt, cam, mapFires) {
+    for (let i = this.tempFires.length - 1; i >= 0; i--) if ((this.tempFires[i].ttl -= dt) <= 0) this.tempFires.splice(i, 1);
+    const fires = this.tempFires.length ? mapFires.concat(this.tempFires) : mapFires;
     // feux (émission limitée aux feux proches de la caméra)
     const drawD2 = this.q.drawDist * this.q.drawDist;
     const rate = this.q.particles;
@@ -168,6 +220,17 @@ export class Fx {
         if (Math.random() < 0.45 * rate) this.smoke.emit(f.x, 2.2, f.z, (Math.random() - 0.5) * 0.4, 1.4, (Math.random() - 0.5) * 0.4, 1.0 * f.s, 4, 0.12, 0.12, 0.13, 0.55, 0.9, 0.1);
         if (Math.random() < 0.08) this.glow.emit(f.x, 1.2, f.z, (Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2, 0.06, 1.2, 1, 0.7, 0.3, 1, 0, -2);
       }
+      for (let i = this.smokes.length - 1; i >= 0; i--) {
+        const g = this.smokes[i];
+        g.ttl -= k;
+        if (g.ttl <= 0) { this.smokes.splice(i, 1); continue; }
+        const n = Math.round(9 * Math.max(0.6, rate) * k * 20);
+        for (let j = 0; j < n; j++) {
+          const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * g.r;
+          const c = 0.55 + Math.random() * 0.15;
+          this.smoke.emit(g.x + Math.cos(a) * r, 0.3 + Math.random() * 2.4, g.z + Math.sin(a) * r, (Math.random() - 0.5) * 0.4, 0.1, (Math.random() - 0.5) * 0.4, 2.4, 2.8, c, c, c, 0.85, 0.4);
+        }
+      }
       for (let i = this.gas.length - 1; i >= 0; i--) {
         const g = this.gas[i];
         g.ttl -= k;
@@ -181,8 +244,19 @@ export class Fx {
     }
     // projectiles (simulation locale identique au serveur)
     for (const p of this.proj.values()) {
+      const ox = p.x, oz = p.z, oy = p.y;
       p.vy -= p.g * dt;
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      if (p.bounce && (p.y <= 0.05 || this.map.solidAt(p.x, p.z, p.y))) {
+        if (p.y <= 0.05) { p.y = 0.05; p.vy = Math.abs(p.vy) * 0.3; p.vx *= 0.55; p.vz *= 0.55; }
+        else {
+          const bx = !!this.map.solidAt(p.x, oz, p.y), bz = !!this.map.solidAt(ox, p.z, p.y);
+          p.x = ox; p.z = oz; p.y = Math.max(0.05, oy);
+          if (bx || !bz) p.vx *= -0.4;
+          if (bz || !bx) p.vz *= -0.4;
+        }
+      }
+      if (p.mesh.userData.model) { p.mesh.rotation.x += dt * 9 * Math.min(1, Math.hypot(p.vx, p.vz)); }
       p.mesh.position.set(p.x, p.y, p.z);
       if (p.trail) {
         if (p.k === 'fusee') this.glow.emit(p.x, p.y, p.z, 0, 0, 0, 0.25, 0.3, p.trail[0], p.trail[1], p.trail[2], 1);
@@ -192,6 +266,14 @@ export class Fx {
     }
     this.glow.update(dt);
     this.smoke.update(dt);
+    for (let i = 0; i < MAX_TRACERS; i++) {
+      if (this.trLife[i] <= 0) { if (this.trCol[i * 6]) this.trCol.fill(0, i * 6, i * 6 + 6); continue; }
+      this.trLife[i] -= dt;
+      const a = Math.max(0, this.trLife[i] / 0.07);
+      this.trCol.set([a, a * 0.8, a * 0.45, a * 0.6, a * 0.45, a * 0.2], i * 6);
+    }
+    this.tracers.geometry.attributes.position.needsUpdate = true;
+    this.tracers.geometry.attributes.color.needsUpdate = true;
     // lumières : assignées aux feux les plus proches + flashs
     this.lightT -= dt;
     if (this.lights.length) {
@@ -221,6 +303,7 @@ export class Fx {
     this.glow.dispose(this.scene); this.smoke.dispose(this.scene);
     for (const p of this.proj.values()) this.scene.remove(p.mesh);
     for (const l of this.lights) this.scene.remove(l);
+    this.scene.remove(this.tracers); this.tracers.geometry.dispose(); this.tracers.material.dispose();
     this.projGeo.dispose();
     for (const k in this.projMats) this.projMats[k].dispose();
   }

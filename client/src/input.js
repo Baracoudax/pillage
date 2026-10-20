@@ -17,7 +17,11 @@ export class Input {
     this.locked = false;
     this.sens = 1;
 
-    const bindKey = { KeyE: 'interact', KeyF: 'interact', KeyH: 'heal', Digit1: 'heal', Tab: 'inv', KeyI: 'inv', KeyV: 'alt', Escape: 'pause', KeyP: 'pause' };
+    const bindKey = {
+      KeyE: 'interact', KeyF: 'interact', KeyH: 'heal', Digit4: 'heal', Tab: 'inv', KeyI: 'inv', KeyV: 'melee', Escape: 'pause', KeyP: 'pause',
+      KeyR: 'reload', Digit1: 'primary', Digit2: 'sidearm', KeyG: 'throw', Digit3: 'throw', KeyT: 'nextThrow', KeyX: 'swap',
+    };
+    this.adsToggle = false;
     window.addEventListener('keydown', (e) => {
       if (!this.enabled) return;
       if (e.code === 'Tab') e.preventDefault();
@@ -37,10 +41,15 @@ export class Input {
     canvas.addEventListener('mousedown', (e) => {
       if (!this.enabled || this.touch) return;
       if (!this.locked) { canvas.requestPointerLock?.(); return; }
-      if (e.button === 0) { this.pressed.add('attack'); this.held.add('attack'); }
-      if (e.button === 2) this.pressed.add('alt');
+      if (e.button === 0) { this.pressed.add('fire'); this.held.add('fire'); }
+      if (e.button === 2) this.held.add('ads');
+      if (e.button === 1) this.pressed.add('melee');
     });
-    window.addEventListener('mouseup', (e) => { if (e.button === 0) this.held.delete('attack'); });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.held.delete('fire');
+      if (e.button === 2) this.held.delete('ads');
+    });
+    canvas.addEventListener('wheel', (e) => { if (this.enabled && this.locked) this.pressed.add('swap'); }, { passive: true });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
@@ -67,6 +76,7 @@ export class Input {
           const a = btn.dataset.act;
           if (a === 'crouch') this.crouch = !this.crouch;
           else if (a === 'sprint') this.sprintToggle = !this.sprintToggle;
+          else if (a === 'ads') { this.adsToggle = !this.adsToggle; btn.classList.toggle('active', this.adsToggle); }
           else { this.pressed.add(a); this.held.add(a); }
           btn.classList.add('down');
           btn.dataset.tid = t.identifier;
@@ -125,6 +135,7 @@ export class Input {
       mx: this.mx, my: this.my, lookX: this.lookX, lookY: this.lookY,
       sprint: this.touch ? this.sprintToggle : this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
       crouch: this.crouch, pressed: new Set(this.pressed), held: this.held,
+      ads: this.touch ? this.adsToggle : this.held.has('ads'),
     };
     this.lookX = this.lookY = 0;
     this.pressed.clear();
@@ -133,6 +144,6 @@ export class Input {
 
   setEnabled(v) {
     this.enabled = v;
-    if (!v) { this.keys.clear(); this.held.clear(); this.pressed.clear(); this.crouch = false; this.sprintToggle = false; if (document.pointerLockElement) document.exitPointerLock(); }
+    if (!v) { this.keys.clear(); this.held.clear(); this.pressed.clear(); this.crouch = false; this.sprintToggle = false; this.adsToggle = false; if (document.pointerLockElement) document.exitPointerLock(); }
   }
 }

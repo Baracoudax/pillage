@@ -1,0 +1,32 @@
+<!doctype html><html><body style="margin:0;background:#222">
+<canvas id="c" width="1500" height="900"></canvas>
+<script type="module">
+// Outil de dev : planche de vignettes des modèles (vite dev -> /dev/viewer.html?dir=weapons)
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+const q = new URLSearchParams(location.search);
+const dir = q.get('dir') || 'weapons';
+const names = (q.get('n') || 'AK47,M4A1,Grease_Gun,Suomi_KP,Shotgun,Sniper,Luger,Makarov,FlareGun,FragGrenadeModel,Flashbang,Smoke_Grenade,Molotov_Cocktail,Pipe_Bomb,M24Grenade,C4,Claymore,AT_MINE,Nuclear_Bomb').split(',');
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+r.autoClear = true;
+r.setScissorTest(true);
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const cols = 5, W = 300, H = 225;
+let i = 0;
+for (const n of names) {
+  const g = await loader.loadAsync(`/models/${dir}/${n}.glb`);
+  const s = new THREE.Scene(); s.background = new THREE.Color(0x3a3a44);
+  s.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2.5)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(2, 3, 2); s.add(d);
+  s.add(g.scene);
+  const b = new THREE.Box3().setFromObject(g.scene), c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3()).length();
+  // vue de côté depuis -X : le +Z apparaît à droite de l'image
+  const cam = new THREE.PerspectiveCamera(35, W / H, 0.001, 100);
+  cam.position.set(c.x - sz * 1.6, c.y + sz * 0.3, c.z); cam.lookAt(c);
+  s.add(new THREE.AxesHelper(sz * 0.4)); // rouge X, vert Y, bleu Z
+  const x = (i % cols) * W, y = 900 - (Math.floor(i / cols) + 1) * H;
+  r.setViewport(x, y, W, H); r.setScissor(x, y, W, H); r.render(s, cam);
+  i++;
+}
+document.title = 'done';
+</script></body></html>

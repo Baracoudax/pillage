@@ -51,7 +51,6 @@ export class Gfx {
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
     this.camera.aspect = w / h;
-    this.camera.fov = w < h ? 80 : 65; // portrait mobile : champ plus large
     this.camera.updateProjectionMatrix();
   }
 

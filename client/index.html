@@ -17,13 +17,16 @@
     <div id="vignette"></div>
     <div id="gasOverlay"></div>
     <div id="dmgDir"><div></div></div>
-    <div id="crosshair"></div>
+    <div id="flashOverlay"></div>
+    <div id="scope"><div></div></div>
+    <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+    <div id="hitmark"></div>
+    <div id="crowd"></div>
     <div id="lockHint">Clique pour jouer · Échap = pause</div>
 
     <div class="tl">
       <div class="bar hp"><div id="hpFill"></div><span>❤ <b id="hpTxt">100</b></span></div>
       <div class="bar st"><div id="stFill"></div></div>
-      <div class="row-s"><span id="weaponTxt"></span> <span id="ammoTxt"></span> <span id="bandTxt"></span></div>
       <div class="bar w"><div id="wFill"></div><span>🎒 <b id="wTxt">0 / 8 kg</b> · <b id="vTxt">0 €</b></span></div>
     </div>
     <div class="tc">
@@ -41,19 +44,29 @@
       <div id="prompt"></div>
       <div id="hold"><div id="holdFill"></div></div>
     </div>
+    <div class="br">
+      <div id="weaponTxt"></div>
+      <div class="ammo"><b id="magTxt">0</b><span id="resTxt"></span></div>
+      <div id="reloadTxt">RECHARGEMENT…</div>
+      <div class="row-s"><span id="throwTxt"></span><span id="bandTxt"></span></div>
+    </div>
     <div id="extract"><span>EXTRACTION…</span><div><div id="extractFill"></div></div></div>
 
     <div id="touch">
       <div class="stick"><div class="knob"></div></div>
       <div class="btns">
-        <button data-act="attack" class="big">👊</button>
+        <button data-act="fire" class="big">🔥</button>
+        <button data-act="ads" class="b-ads">🎯</button>
         <button data-act="interact" id="btnUse">✋</button>
-        <button data-act="sprint">🏃</button>
-        <button data-act="crouch">🧎</button>
-        <button data-act="heal">🩹</button>
-        <button data-act="inv">🎒</button>
-        <button data-act="pause" class="mini">⏸</button>
+        <button data-act="reload" class="b-rl">🔄</button>
+        <button data-act="swap" class="b-sw">🔫</button>
+        <button data-act="throw" class="b-th">💣</button>
+        <button data-act="sprint" class="b-sp">🏃</button>
+        <button data-act="crouch" class="b-cr">🧎</button>
+        <button data-act="heal" class="b-he">🩹</button>
+        <button data-act="inv" class="b-in">🎒</button>
       </div>
+      <button data-act="pause" class="mini">⏸</button>
     </div>
 
     <div id="invPanel" class="panel">
@@ -66,9 +79,9 @@
       <button id="btnResume" class="primary">Reprendre</button>
       <button id="btnQuit" class="danger">Abandonner le raid (butin perdu)</button>
       <div class="controls">
-        <b>Contrôles PC</b> — ZQSD/WASD : bouger · Souris : caméra · Clic gauche : frapper/tirer ·
-        Clic droit / V : coup de poing · E (maintenir) : piller · Maj : sprint · C : s'accroupir ·
-        H / 1 : bandage · Tab : sac · Échap : pause
+        <b>Contrôles PC</b> — ZQSD/WASD : bouger · Souris : viser · Clic gauche : tirer · Clic droit : viser (lunette) ·
+        R : recharger · 1 / 2 / molette : changer d'arme · G : lancer · T : choisir la grenade · V : coup de crosse ·
+        E (maintenir) : piller · Maj : sprint · C : s'accroupir · H : bandage · Tab : sac · Échap : pause
       </div>
     </div>
   </div>
@@ -101,7 +114,7 @@
           </div>
         </div>
         <div class="public"><h3>Parties publiques <button id="btnRefresh" class="mini">↻</button></h3><div id="roomList" class="hint">—</div></div>
-        <p class="hint">En multijoueur, les autres pilleurs peuvent te mettre K.O. et récupérer ton sac. Butin perdu si tu tombes, si tu te fais interpeller ou si le temps s'écoule.</p>
+        <p class="hint">Chaque coup de feu s'entend : il attire les CRS. Pour passer inaperçu, glisse-toi dans un cortège de gilets jaunes (encore mieux avec un gilet jaune sur le dos). En multijoueur, les autres pilleurs peuvent te mettre K.O. et récupérer ton sac.</p>
       </section>
       <section id="tab-stash">
         <h2>Ta planque <button id="btnSellAll" class="primary">Tout vendre au receleur</button></h2>
