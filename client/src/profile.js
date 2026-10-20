@@ -10,7 +10,7 @@ function fresh() {
   return {
     name: 'Casseur' + Math.floor(Math.random() * 900 + 100),
     money: 300, stash: [], equipped, owned,
-    cons: { ...Object.fromEntries(Object.keys(CONSUMABLES).map((k) => [k, 0])), bandage: 2, a9: 24, fumi: 1 },
+    cons: { ...Object.fromEntries(Object.keys(CONSUMABLES).map((k) => [k, 0])), bandage: 2 },
     unlocked: { cite: true },
     stats: { raids: 0, extracts: 0, best: 0, earned: 0, arrests: 0 },
     settings: { quality: 'auto', sens: 1, volume: 0.7 },
@@ -77,6 +77,16 @@ export class Profile {
     this.d.stats.earned += ITEMS[id].value;
     this.save();
     return ITEMS[id].value;
+  }
+  // garder une arme récupérée sur un pilleur (si le contact correspondant est débloqué)
+  keepWeapon(index) {
+    const it = ITEMS[this.d.stash[index]];
+    const g = it && GEAR_BY_ID[it.weapon];
+    if (!g || this.d.owned[g.id] || g.tier > this.tier()) return false;
+    this.d.stash.splice(index, 1);
+    this.d.owned[g.id] = true;
+    this.save();
+    return true;
   }
   sellAll() {
     let sum = 0;

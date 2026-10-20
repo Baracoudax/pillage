@@ -53,8 +53,8 @@ for (const did of DISTRICT_ORDER) {
   const ms = performance.now() - t1;
   console.log(`${did}: map ${map.size}m gen ${tGen.toFixed(0)}ms, shops ${map.shops.length}, loot ${map.lootSpots.length}, solids ${map.solids.length}`);
   console.log(`  ${steps} ticks en ${ms.toFixed(0)}ms (${(ms / steps).toFixed(3)} ms/tick), npcs ${w.npcs.length}, heat ${w.heat.toFixed(0)}`);
-  const kinds = [0, 1, 2, 3].map((k) => w.npcs.filter((n) => n.kind === k).length);
-  console.log(`  PNJ émeutiers/CRS/GJ/GIGN: ${kinds.join('/')}, cortèges ${w.corteges.length}, munitions ${stats.ammo0} -> ${p.ammo.a762 + p.mag.primary}, PNJ à terre ${w.npcs.filter((n) => n.st === 'down').length}`);
+  const kinds = [0, 1, 2, 3, 4].map((k) => w.npcs.filter((n) => n.kind === k).length);
+  console.log(`  PNJ émeutiers/CRS/GJ/GIGN/rivaux: ${kinds.join('/')}, cortèges ${w.corteges.length}, munitions ${stats.ammo0} -> ${p.ammo.a762 + p.mag.primary}, PNJ à terre ${w.npcs.filter((n) => n.st === 'down').length}`);
   console.log(`  résultat: ${result ? result.t + ' ' + (result.reason || '') + ' ' + (result.value ?? '') + '€' : 'aucun'}, snap moyen ${(snapBytes / nSnaps).toFixed(0)} o`, JSON.stringify(msgs));
 }
 
@@ -97,4 +97,24 @@ for (const armed of [false, true]) {
   const gign = w.npcs.filter((n) => n.kind === 3).length;
   console.log(`${armed ? 'avec' : 'sans'} arme à feu : GIGN sur zone = ${gign}, tirs ${w.gunShots}`);
   if (armed ? gign < 4 : gign > 0) { console.error('ÉCHEC test escalade'); process.exitCode = 1; }
+}
+
+// --- Pilleurs rivaux : ils pillent, et une fois K.O. leur sac contient butin, arme et munitions
+{
+  const w = new World('centre', { seed: 11 });
+  const p = w.addPlayer(1, 'x', {}, () => {});
+  p.hp = p.maxHp = 1e9;
+  const rivals = () => w.npcs.filter((n) => n.kind === 4);
+  const r0 = rivals().length;
+  for (let i = 0; i < 20 * 50; i++) w.step();
+  const looted = rivals().reduce((s, n) => s + n.inv.length, 0);
+  const n = rivals().find((x) => x.st !== 'down');
+  const before = w.bags.size;
+  w.damage(n, 1e4, { kind: 'player', id: 1, x: n.x, z: n.z }, false);
+  const bag = [...w.bags.values()].pop();
+  p.x = bag.x; p.z = bag.z;
+  w.pickBag(p, bag.id);
+  const gotWeapon = p.inv.some((id) => id.startsWith('w_'));
+  console.log(`rivaux : ${r0} au départ, ${looted} objets pillés en 50 s, sac lâché=${w.bags.size >= before}, arme récupérée=${gotWeapon} (${p.inv.join(', ')})`);
+  if (!r0 || !gotWeapon) { console.error('ÉCHEC test rivaux'); process.exitCode = 1; }
 }

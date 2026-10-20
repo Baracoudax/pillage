@@ -194,6 +194,16 @@ export function tierLevel(stats, unlocked) {
 }
 export const hasFirearm = (lo) => ['primary', 'sidearm'].some((s) => WEAPONS[lo[s]]?.firearm);
 
+// Armes ramassées sur un pilleur K.O. : objets de butin (w_<arme>). À la planque, on peut les garder
+// (si le contact correspondant est débloqué) ou les revendre au receleur.
+for (const id in WEAPONS) {
+  const w = WEAPONS[id];
+  ITEMS['w_' + id] = {
+    name: w.name, icon: w.icon, weapon: id, shops: [],
+    value: Math.max(30, Math.round(w.price * 0.35)), w: w.melee ? 1.5 : w.slot === 'sidearm' ? 1 : 3.5, r: Math.min(4, w.tier + (w.firearm ? 1 : 0)),
+  };
+}
+
 // Valide le loadout envoyé par un client (le serveur ne fait pas confiance aux ids).
 export function sanitizeLoadout(lo = {}) {
   const out = {};

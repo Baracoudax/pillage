@@ -61,8 +61,13 @@ function render() {
   const total = d.stash.reduce((s, id) => s + ITEMS[id].value, 0);
   $('stash').innerHTML = ids.length ? ids.map((id) => {
     const it = ITEMS[id];
-    return `<div class="row"><span style="color:${RARITY[it.r].color}">${it.icon} ${it.name} <small>x${counts[id]}</small></span>
-      <span>${fmt(it.value)} <button data-sell="${id}">Vendre</button></span></div>`;
+    let keep = '';
+    if (it.weapon) {
+      const g = GEAR_BY_ID[it.weapon];
+      keep = d.owned[g.id] ? ' <small>(déjà possédée)</small>' : g.tier > profile.tier() ? ` <small>🔒 ${TIERS[g.tier].name}</small>` : ` <button class="primary" data-keep="${id}">Garder</button>`;
+    }
+    return `<div class="row"><span style="color:${RARITY[it.r].color}">${it.icon} ${it.name}${it.weapon ? ' <small>(arme)</small>' : ''} <small>x${counts[id]}</small></span>
+      <span>${fmt(it.value)}${keep} <button data-sell="${id}">Vendre</button></span></div>`;
   }).join('') + `<div class="row"><b>Total</b><b>${fmt(total)}</b></div>` : '<div class="empty">Ta planque est vide. Va piller !</div>';
   $('btnSellAll').disabled = !d.stash.length;
   const st = d.stats;
@@ -104,11 +109,12 @@ function render() {
 }
 
 $('menu').addEventListener('click', (e) => {
-  const t = e.target.closest('[data-d],[data-unlock],[data-sell],[data-buy],[data-equip],[data-cons]');
+  const t = e.target.closest('[data-d],[data-unlock],[data-sell],[data-keep],[data-buy],[data-equip],[data-cons]');
   if (!t) return;
   audio.init();
   if (t.dataset.unlock) { if (profile.unlock(t.dataset.unlock)) { district = t.dataset.unlock; audio.play('cash'); } }
   else if (t.dataset.d) { if (profile.d.unlocked[t.dataset.d]) district = t.dataset.d; }
+  else if (t.dataset.keep) { if (profile.keepWeapon(profile.d.stash.indexOf(t.dataset.keep))) audio.play('pick'); }
   else if (t.dataset.sell) { profile.sell(profile.d.stash.indexOf(t.dataset.sell)); audio.play('cash'); }
   else if (t.dataset.buy) { if (profile.buyGear(t.dataset.buy)) audio.play('cash'); }
   else if (t.dataset.equip) profile.equip(t.dataset.equip);
@@ -204,6 +210,7 @@ async function refreshRooms() {
 // ---------------------------------------------------------------- fin de raid
 const REASONS = {
   arrest: ['🚔 Interpellé !', 'Les CRS t\'ont arrêté. Butin saisi'],
+  rival: ['💥 K.O.', 'Un pilleur rival t\'a mis à terre et a fait les poches'],
   gign: ['🎯 Neutralisé par le GIGN', 'Le GIGN t\'a interpellé. Butin et armes saisis'],
   ko: ['💥 K.O.', 'Un émeutier t\'a mis à terre et a fait les poches'],
   pvp: ['💥 K.O.', 'Un autre pilleur t\'a eu'],

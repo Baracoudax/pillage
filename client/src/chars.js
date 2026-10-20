@@ -54,6 +54,12 @@ export function appearance(kind, id, extra = {}) {
     // noir intégral, cagoule, casque à lunettes, gilet tactique, fusil d'assaut
     return { torso: 0x101114, legs: 0x0e0f12, arm: 0x101114, head: 0x0b0b0b, eyes: 0x6a5040, helmet: 0x15171b, visor: 0x2b3a30, pads: 0x1a1c20, tacvest: 0x262a22, gun: true };
   }
+  if (kind === 'looter') {
+    // pilleur rival : tenue de rue, sac à dos, parfois capuche ou cagoule
+    const top = pick(CASUAL.concat(DARK), 1);
+    const masked = (h >>> 9) % 3 === 0;
+    return { torso: top, legs: pick(PANTS, 5), arm: top, head: masked ? 0x0e0e0e : pick(SKIN, 7), eyes: masked ? pick(SKIN, 7) : null, hood: (h >>> 13) % 2 ? top : null, pack: [0x7a2a8a, 0x1d4ed8, 0x9a3412, 0x111111][(h >>> 3) % 4] };
+  }
   if (kind === 'gj') {
     const shirt = pick(CASUAL, 1);
     return { torso: shirt, legs: pick(PANTS, 5), arm: shirt, head: pick(SKIN, 7), vest: GJ_YELLOW, stripe: STRIPE, sign: (h >>> 11) % 3 === 0 ? 0xf2f2f2 : null };

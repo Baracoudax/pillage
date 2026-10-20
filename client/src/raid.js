@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { getMap } from '../../shared/map.js';
 import { PLAYER, SHOP_TYPES } from '../../shared/config.js';
-import { ITEMS, RARITY, GEAR_BY_ID, WEAPONS, THROWABLES, THROW_ORDER, invValue, holdTime } from '../../shared/items.js';
-import { F, NPC_CRS, NPC_GJ, NPC_GIGN } from '../../shared/world.js';
+import { ITEMS, RARITY, GEAR_BY_ID, WEAPONS, THROWABLES, THROW_ORDER, CONSUMABLES, invValue, holdTime } from '../../shared/items.js';
+import { F, NPC_CRS, NPC_GJ, NPC_GIGN, NPC_LOOTER } from '../../shared/world.js';
 import { CityView } from './cityView.js';
 import { CharacterRenderer, appearance } from './chars.js';
 import { Fx } from './fx.js';
@@ -202,6 +202,8 @@ export class Raid {
       const d = Math.hypot(s0.x - this.me.x, s0.z - this.me.z);
       if (s0.kind === NPC_CRS) { if (d > 30) continue; ctx.fillStyle = '#ff3b3b'; }
       else if (s0.kind === NPC_GJ) { if (d > 45) continue; ctx.fillStyle = '#d7f20f'; }
+      else if (s0.kind === NPC_LOOTER) { if (d > 35) continue; ctx.fillStyle = '#c77dff'; }
+      else if (s0.kind === NPC_GIGN) { if (d > 40) continue; ctx.fillStyle = '#ff2050'; }
       else { if (d > 20) continue; ctx.fillStyle = '#ff9f43'; }
       ctx.fillRect(s0.x - 1, s0.z - 1, 2, 2);
     }
@@ -294,14 +296,15 @@ export class Raid {
           if (f & F.SHOOT) p.shotT = now;
           seenP.add(id);
         }
-        for (const [id, kind, x, z, rot, f] of m.n) {
+        for (const [id, kind, x, z, rot, f, wid, loot] of m.n) {
           let n = this.npcs.get(id);
           if (!n) {
-            const k = kind === NPC_CRS ? 'crs' : kind === NPC_GJ ? 'gj' : kind === NPC_GIGN ? 'gign' : 'rioter';
+            const k = kind === NPC_CRS ? 'crs' : kind === NPC_GJ ? 'gj' : kind === NPC_GIGN ? 'gign' : kind === NPC_LOOTER ? 'looter' : 'rioter';
             n = { id, kind, it: new Interp(), phase: Math.random() * 6, look: appearance(k, id) };
             this.npcs.set(id, n);
           }
           n.it.push(m.tm, { x, z, rot, f, kind });
+          if (wid !== undefined) { n.wid = wid; n.loot = loot; n.look.gun = !WEAPONS[wid]?.melee; }
           n.last = { x, z, f, kind };
           seenN.add(id);
         }
@@ -374,7 +377,15 @@ export class Raid {
         this.audio.play(m.item.startsWith('cash') ? 'cash' : 'pick');
         break;
       }
-      case 'gotbag': this.toast(`+ ${m.n} objet(s) récupéré(s)`, 'loot'); this.audio.play('pick'); break;
+      case 'gotbag': {
+        const extra = Object.entries(m.cons || {}).map(([k, v]) => `${v} ${(CONSUMABLES[k]?.name || k).toLowerCase()}`).join(', ');
+        this.toast(`Sac fouillé : ${m.n} prise(s)${extra ? ' — ' + extra : ''}`, 'loot', 3500);
+        this.audio.play('pick');
+        break;
+      }
+      case 'rival': this.toast('Un pilleur rival veut ton butin !', 'warn'); break;
+      case 'rivalko': this.toast(`Pilleur rival K.O. ! Fouille son sac (≈ ${m.v} €).`, 'loot', 3500); break;
+      case 'rivalout': this.toast('Un pilleur rival s’est extrait avec son butin.'); break;
       case 'full': this.toast('Sac trop lourd !', 'warn'); this.audio.play('full'); break;
       case 'hurt': {
         this.lastHurt = now;
@@ -735,6 +746,7 @@ export class Raid {
       if (s.f & F.THROW) n.thr = 1; else n.thr = Math.max(0, (n.thr || 0) - dt * 3);
       const hand = this.chars.draw({ x: s.x, z: s.z, rot: s.rot, phase: n.phase, moving: s.f & F.MOVE, run: s.f & F.RUN, crouch: false, down: s.f & F.DOWN, attack: n.kind === NPC_GIGN ? 0 : n.atk, stun: s.f & F.STUN, throw: n.thr }, n.look);
       if (n.kind === NPC_GIGN && !(s.f & F.DOWN)) this.remoteGun('n' + n.id, 'm4a1', hand);
+      if (n.kind === NPC_LOOTER && n.wid && !(s.f & F.DOWN)) this.remoteGun('n' + n.id, n.wid, hand);
     }
     for (const [id, g] of this.remoteGuns) if (typeof id === 'string' && !this.npcs.has(Number(id.slice(1)))) { this.scene.remove(g.obj); this.remoteGuns.delete(id); }
     this.chars.end();

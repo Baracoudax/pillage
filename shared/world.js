@@ -2,13 +2,13 @@
 // Communication uniquement par messages JSON-compatibles (send(msg) / onMessage(id, msg)).
 import { DISTRICTS, PLAYER, NPC_RADIUS, TICK_DT, INTEREST_RADIUS } from './config.js';
 import { getMap } from './map.js';
-import { ITEMS, GEAR_BY_ID, WEAPONS, FIST, THROWABLES, CONSUMABLES, FREE_STONES, rollItem, sanitizeLoadout, invWeight, invValue, hasFirearm } from './items.js';
+import { ITEMS, GEAR_BY_ID, WEAPONS, FIST, THROWABLES, CONSUMABLES, FREE_STONES, rollItem, sanitizeLoadout, invWeight, invValue, hasFirearm, holdTime } from './items.js';
 import { mulberry32 } from './rng.js';
 
 const GRAVITY = { lbd: 2.5, fusee: 6, mortier: 9, pierre: 16, pave: 16, gaz: 14, fumi: 15, flash: 15, frag: 15, molotov: 15, desenc: 15 };
 const FUSE = { fumi: 1.2, flash: 1.4, frag: 2.5, desenc: 1.0, gaz: 99, mortier: 1.7 };
 const BOUNCE = new Set(['fumi', 'flash', 'frag', 'desenc']);
-export const NPC_RIOTER = 0, NPC_CRS = 1, NPC_GJ = 2, NPC_GIGN = 3;
+export const NPC_RIOTER = 0, NPC_CRS = 1, NPC_GJ = 2, NPC_GIGN = 3, NPC_LOOTER = 4;
 const isPolice = (n) => n.kind === NPC_CRS || n.kind === NPC_GIGN;
 export const F = { MOVE: 1, RUN: 2, CROUCH: 4, DOWN: 8, ATTACK: 16, STUN: 32, THROW: 64, HEAL: 128, SHOOT: 256 };
 const HIST = 24;
@@ -58,6 +58,8 @@ export class World {
     for (let i = 0; i < this.d.rioters; i++) this.spawnRioter();
     for (let i = 0; i < Math.ceil(this.d.crsBase / 3); i++) this.spawnSquad(true);
     for (let i = 0; i < (this.d.gj || 1); i++) this.spawnCortege(i === 0);
+    this.looterT = 20;
+    for (let i = 0; i < (this.d.looters || 0); i++) this.spawnLooter();
   }
 
   // ---------------------------------------------------------------- joueurs
@@ -211,16 +213,28 @@ export class World {
       const it = ITEMS[b.items[i]];
       if (w + it.w <= p.cap + 1e-6) { w += it.w; p.inv.push(b.items[i]); b.items.splice(i, 1); i--; took++; }
     }
+    // munitions, grenades, bandages : pas de poids, on prend tout
+    const got = {};
+    for (const k in b.cons || {}) {
+      const n = b.cons[k];
+      if (!n) continue;
+      if (k === 'bandage') p.band += n;
+      else if (THROWABLES[k]) p.thr[k] = (p.thr[k] || 0) + n;
+      else p.ammo[k] = (p.ammo[k] || 0) + n;
+      got[k] = n; took++;
+    }
+    b.cons = {};
     if (!took) { p.send({ t: 'ev', e: 'full' }); return; }
     this.sendInv(p);
-    p.send({ t: 'ev', e: 'gotbag', n: took });
+    p.send({ t: 'ev', e: 'gotbag', n: took, cons: got });
     if (!b.items.length) { this.bags.delete(id); this.bcast({ t: 'bagdel', id }); }
   }
 
-  dropBag(x, z, items) {
-    if (!items.length) return;
+  dropBag(x, z, items, cons) {
+    const hasCons = cons && Object.values(cons).some((n) => n > 0);
+    if (!items.length && !hasCons) return;
     const id = this.nid++;
-    this.bags.set(id, { id, x, z, items: items.slice() });
+    this.bags.set(id, { id, x, z, items: items.slice(), cons: hasCons ? { ...cons } : {} });
     this.bcast({ t: 'bag', id, x: r2(x), z: r2(z) });
   }
 
@@ -547,7 +561,7 @@ export class World {
         const atk = this.players.get(src.id);
         if (atk) atk.send({ t: 'ev', e: 'hitc' });
       }
-      if (t.hp <= 0) this.koPlayer(t, src.kind === 'gign' ? 'gign' : src.kind === 'crs' || src.kind === 'gas' ? 'arrest' : src.kind === 'player' && src.id !== t.id ? 'pvp' : 'ko', src);
+      if (t.hp <= 0) this.koPlayer(t, src.kind === 'gign' ? 'gign' : src.kind === 'crs' || src.kind === 'gas' ? 'arrest' : src.kind === 'player' && src.id !== t.id ? 'pvp' : src.kind === 'rival' ? 'rival' : 'ko', src);
       return;
     }
     const n = t;
@@ -561,6 +575,9 @@ export class World {
           p.hitCrsT = this.time;
           this.heat = Math.min(100, this.heat + 3);
           this.alertSquad(n, p, true);
+        } else if (n.kind === NPC_LOOTER) {
+          n.foe = p.id; n.foeU = this.time + 40;
+          if (n.mode !== 'flee') { n.mode = 'fight'; n.target = p.id; n.path = null; }
         } else if (n.kind === NPC_GJ) {
           const g = this.corteges.find((c) => c.id === n.grp);
           if (g) g.hostile.set(p.id, this.time + 60);
@@ -574,6 +591,14 @@ export class World {
       n.downU = this.time + (n.kind === NPC_CRS ? 25 : 20);
       n.path = null;
       if (isPolice(n)) this.heat = Math.min(100, this.heat + 5);
+      if (n.kind === NPC_LOOTER) {
+        // tout son équipement tombe : butin, arme, munitions
+        const items = n.inv.slice();
+        if (n.wid) items.push('w_' + n.wid);
+        this.dropBag(n.x, n.z, items, n.cons);
+        n.inv = []; n.cons = {};
+        if (src.kind === 'player') this.players.get(src.id)?.send({ t: 'ev', e: 'rivalko', v: invValue(items) });
+      }
       if (n.stolen.length) { this.dropBag(n.x, n.z, n.stolen); n.stolen = []; }
     }
   }
@@ -583,7 +608,11 @@ export class World {
     p.hp = 0;
     p.koT = this.time;
     const lost = p.inv;
-    if (lost.length) this.dropBag(p.x, p.z, lost);
+    // le sac au sol contient le butin et les consommables : les autres pilleurs peuvent tout récupérer
+    const cons = { bandage: p.band, ...p.ammo, ...p.thr };
+    cons.pierre = Math.max(0, (p.thr.pierre || 0) - FREE_STONES);
+    for (const s2 of ['primary', 'sidearm']) { const w = WEAPONS[p.wp[s2]]; if (w) cons[w.ammo] = (cons[w.ammo] || 0) + p.mag[s2]; }
+    this.dropBag(p.x, p.z, lost, cons);
     p.inv = [];
     p.send({ t: 'ko', reason, lost, value: invValue(lost) });
     if (src && src.kind === 'player' && src.id !== p.id) {
@@ -710,13 +739,13 @@ export class World {
     return pts[Math.floor(this.rng() * pts.length)];
   }
 
-  lobAt(n, kind, tx, tz, owner, ownerKind) {
+  lobAt(n, kind, tx, tz, owner, ownerKind, w) {
     const dx = tx - n.x, dz = tz - n.z, d = Math.max(1, Math.hypot(dx, dz));
     const vh = 12;
     const tt = d / vh;
     const y0 = 1.7;
     const vy = (0.4 - y0 + 0.5 * GRAVITY[kind] * tt * tt) / tt;
-    this.spawnProj(kind, n.x + (dx / d) * 0.5, y0, n.z + (dz / d) * 0.5, (dx / d) * vh, vy, (dz / d) * vh, owner, ownerKind);
+    this.spawnProj(kind, n.x + (dx / d) * 0.5, y0, n.z + (dz / d) * 0.5, (dx / d) * vh, vy, (dz / d) * vh, owner, ownerKind, w);
   }
 
   stepRioter(n, dt) {
@@ -1041,6 +1070,197 @@ export class World {
     else { n.rot += dt * 0.8 * (n.slot % 2 ? 1 : -1); if (sq.retarget - this.time > 5) sq.retarget = this.time + 3; }
   }
 
+  // ---- Pilleurs rivaux : pillent les mêmes magasins, se défendent, rackettent, puis s'extraient
+  spawnLooter() {
+    const pts = this.map.streetPts;
+    let pt = pts[0];
+    for (let k = 0; k < 12; k++) {
+      pt = pts[Math.floor(this.rng() * pts.length)];
+      let ok = true;
+      for (const p of this.players.values()) if (Math.hypot(p.x - pt.x, p.z - pt.z) < 35) ok = false;
+      if (ok) break;
+    }
+    const n = this.newNpc(NPC_LOOTER, pt.x, pt.z);
+    n.hp = 90;
+    const r = this.rng(), tier = this.d.tier;
+    // équipement selon la richesse du quartier
+    if (tier >= 3 && r < 0.35) n.wid = ['makarov', 'greasegun', 'shotgun', 'luger'][Math.floor(this.rng() * 4)];
+    else if (tier >= 2 && r < 0.6) n.wid = 'mortier';
+    else n.wid = ['barre', 'barre', 'pied_biche', 'batte'][Math.floor(this.rng() * 4)];
+    const w = WEAPONS[n.wid];
+    n.cons = { pierre: 4 + Math.floor(this.rng() * 8), bandage: this.rng() < 0.5 ? 1 : 0 };
+    if (w.ammo) n.cons[w.ammo] = w.ammo === 'am' ? 6 + Math.floor(this.rng() * 6) : 10 + Math.floor(this.rng() * 30);
+    if (tier >= 2 && this.rng() < 0.3) n.cons.molotov = 1;
+    n.mag = w.mag || 0;
+    n.inv = [];
+    n.cap = 8 + Math.floor(this.rng() * 10);
+    n.aggr = this.rng();
+    n.mode = 'loot';
+    n.extractAt = this.time + 90 + this.rng() * 120;
+    n.grabU = 0; n.spot = null;
+    return n;
+  }
+
+  looterThink(n) {
+    if (n.mode === 'flee' && this.time < n.fleeU) return;
+    // la police fait fuir
+    for (const c of this.npcs) {
+      if (!isPolice(c) || c.st === 'down') continue;
+      if (Math.hypot(c.x - n.x, c.z - n.z) < 15 && this.los(n.x, n.z, c.x, c.z)) {
+        n.mode = 'flee'; n.fleePt = { x: c.x, z: c.z }; n.fleeU = this.time + 5; n.path = null; return;
+      }
+    }
+    if (n.hp < 30 && n.mode === 'fight') { const p = this.players.get(n.target); n.mode = 'flee'; n.fleePt = p ? { x: p.x, z: p.z } : { x: n.x + 1, z: n.z }; n.fleeU = this.time + 8; n.path = null; return; }
+    if (n.mode === 'fight') {
+      const p = this.players.get(n.target);
+      if (!p || p.st !== 'alive' || Math.hypot(p.x - n.x, p.z - n.z) > 30 || (this.time > (n.foeU || 0) && this.time > (n.robU || 0))) { n.mode = n.inv.length >= 3 ? 'extract' : 'loot'; n.path = null; }
+      return;
+    }
+    for (const p of this.players.values()) {
+      if (p.st !== 'alive') continue;
+      const d = Math.hypot(p.x - n.x, p.z - n.z);
+      if (d > 14 || !this.los(n.x, n.z, p.x, p.z)) continue;
+      const loaded = invValue(p.inv) > 150;
+      // racket : les plus agressifs s'en prennent aux joueurs chargés de butin
+      if ((n.foe === p.id && this.time < n.foeU) || (loaded && n.aggr > 0.55 && this.rng() < 0.25 && !p.crowd)) {
+        n.mode = 'fight'; n.target = p.id; n.robU = this.time + 25; n.path = null;
+        p.send({ t: 'ev', e: 'rival' });
+        return;
+      }
+    }
+  }
+
+  looterAttack(n, p, d) {
+    const w = WEAPONS[n.wid];
+    n.rot = Math.atan2(p.x - n.x, p.z - n.z);
+    const src = { kind: 'rival', id: n.id, x: n.x, z: n.z };
+    if (w.melee || (d < 1.8)) {
+      if (d < 1.7 && this.time > n.cdU) {
+        n.cdU = this.time + (w.melee ? w.cd + 0.25 : 0.9); n.atkT = this.time;
+        this.damage(p, (w.melee ? w.dmg : 10) * 0.7, src, true, 0.2);
+        return true;
+      }
+      if (w.melee) {
+        // pierres à distance moyenne
+        if (d > 5 && d < 16 && n.cons.pierre > 0 && this.time > n.throwU) {
+          n.cons.pierre--; n.throwU = this.time + 1.4 + this.rng(); n.atkT = this.time;
+          this.lobAt(n, 'pierre', p.x, p.z, n.id, 'n');
+          return true;
+        }
+        return false;
+      }
+    }
+    if (this.time < n.cdU) return d > 4;
+    if (n.mag <= 0) {
+      if (!(n.cons[w.ammo] > 0)) { n.wid = n.wid === 'mortier' ? 'barre' : 'barre'; return false; }
+      const take = Math.min(w.mag, n.cons[w.ammo]); n.cons[w.ammo] -= take; n.mag = take;
+      n.cdU = this.time + w.reload; return true;
+    }
+    if (d > 32) return false;
+    n.mag--; n.atkT = this.time;
+    n.cdU = this.time + Math.max(0.35, 60 / w.rpm) + (w.auto ? 0 : 0.5) + this.rng() * 0.4;
+    if (w.proj === 'mortier') {
+      this.lobAt(n, 'mortier', p.x, p.z, n.id, 'n', w);
+    } else {
+      const acc = 0.55 - d * 0.012 - (p.moving ? 0.15 : 0) - (p.crouch ? 0.08 : 0);
+      const hit = this.rng() < acc;
+      const ox = n.x, oy = 1.45, oz = n.z;
+      let tx = p.x, tz = p.z, ty = 1.2;
+      if (!hit) { tx += (this.rng() - 0.5) * 3; tz += (this.rng() - 0.5) * 3; ty += (this.rng() - 0.3); }
+      const dx = tx - ox, dy = ty - oy, dz = tz - oz, L = Math.hypot(dx, dy, dz) || 1;
+      const t = this.map.ray3(ox, oy, oz, dx / L, dy / L, dz / L, hit ? L + 0.01 : 60);
+      const really = hit && t >= L - 0.05;
+      if (really) this.damage(p, w.dmg * (w.pellets ? 3 : 1) * 0.6, src, true, 0.05);
+      this.bcastNear(n.x, n.z, { t: 'shot', id: n.id, w: n.wid, o: [r2(ox), oy, r2(oz)], e: [[r2(ox + (dx / L) * t), r2(oy + (dy / L) * t), r2(oz + (dz / L) * t), really ? 1 : 0]] });
+      this.noise(n.x, n.z, w.noise, null);
+      this.lastShot = { x: n.x, z: n.z, t: this.time };
+      if (!this.gignCalled) { this.gignCalled = true; this.gignAt = Math.min(this.gignAt, this.time + 45); this.bcast({ t: 'ev', e: 'gign', eta: 45 }); }
+      this.gunShots++;
+    }
+    return true;
+  }
+
+  stepLooter(n, dt) {
+    if (n.st === 'down') {
+      if (this.time > n.downU) { this.npcs.splice(this.npcs.indexOf(n), 1); }
+      return;
+    }
+    if (this.time < n.stunU) return;
+    n.thinkT -= dt;
+    if (n.thinkT <= 0) { n.thinkT = 0.35 + this.rng() * 0.2; this.looterThink(n); }
+    switch (n.mode) {
+      case 'flee': {
+        if (this.time > n.fleeU) { n.mode = n.inv.length >= 3 ? 'extract' : 'loot'; n.path = null; break; }
+        if (!n.path || n.pi >= n.path.length) {
+          const dx = n.x - n.fleePt.x, dz = n.z - n.fleePt.z, d = Math.hypot(dx, dz) || 1;
+          const t = this.randomStreetNear(n.x + (dx / d) * 25, n.z + (dz / d) * 25, 18);
+          this.requestPath(n, t.x, t.z);
+        }
+        this.followPath(n, 5, dt);
+        break;
+      }
+      case 'fight': {
+        const p = this.players.get(n.target);
+        if (!p || p.st !== 'alive') { n.mode = 'loot'; break; }
+        const d = Math.hypot(p.x - n.x, p.z - n.z);
+        const vis = d < 30 && this.los(n.x, n.z, p.x, p.z);
+        const ranged = !WEAPONS[n.wid].melee;
+        if (vis && this.looterAttack(n, p, d)) break;
+        // à distance : garde ses distances ; mêlée : fonce
+        if (ranged && vis && d < 9) this.moveNpc(n, n.x - (p.x - n.x), n.z - (p.z - n.z), 3, dt);
+        else if (!ranged || !vis || d > 20) this.navTo(n, p.x, p.z, 4.6, dt);
+        n.rot = Math.atan2(p.x - n.x, p.z - n.z);
+        break;
+      }
+      case 'loot': {
+        if (invWeight(n.inv) > n.cap * 0.8 || this.time > n.extractAt) { n.mode = 'extract'; n.path = null; break; }
+        let l = n.spot != null ? this.loot[n.spot] : null;
+        if (!l || l.taken) {
+          // un objet encore en rayon, plutôt proche
+          let best = null, bd = 1e9;
+          for (let k = 0; k < 25; k++) {
+            const c = this.loot[Math.floor(this.rng() * this.loot.length)];
+            if (c.taken) continue;
+            const d = Math.hypot(c.x - n.x, c.z - n.z) + this.rng() * 20;
+            if (d < bd) { bd = d; best = c; }
+          }
+          if (!best) { n.mode = 'extract'; break; }
+          n.spot = best.id; l = best; n.path = null; n.grabU = 0;
+        }
+        const d = Math.hypot(l.x - n.x, l.z - n.z);
+        if (d > 1.7) { this.navTo(n, l.x, l.z, 2.6, dt); n.grabU = 0; break; }
+        n.rot = Math.atan2(l.x - n.x, l.z - n.z);
+        if (!n.grabU) n.grabU = this.time + holdTime(l.item) + 0.6;
+        else if (this.time >= n.grabU) {
+          if (!l.taken && invWeight(n.inv) + ITEMS[l.item].w <= n.cap) {
+            l.taken = true; n.inv.push(l.item); n.atkT = this.time;
+            this.bcast({ t: 'loot', id: l.id });
+            this.hot.push({ x: l.x, z: l.z, t: this.time });
+          }
+          n.spot = null; n.grabU = 0;
+        }
+        break;
+      }
+      case 'extract': {
+        let best = null, bd = 1e9;
+        for (const e of this.map.exits) {
+          if (this.time < e.activeFrom) continue;
+          const d = Math.hypot(e.x - n.x, e.z - n.z);
+          if (d < bd) { bd = d; best = e; }
+        }
+        if (!best) break;
+        if (bd < 2.5) {
+          // il s'en va avec son butin
+          this.npcs.splice(this.npcs.indexOf(n), 1);
+          this.bcastNear(n.x, n.z, { t: 'ev', e: 'rivalout' });
+          break;
+        }
+        this.navTo(n, best.x, best.z, 3.6, dt);
+        break;
+      }
+    }
+  }
+
   stepCortege(g, dt) {
     g.members = g.members.filter((m) => this.npcs.includes(m));
     const alive = g.members.filter((m) => m.st !== 'down');
@@ -1144,6 +1364,12 @@ export class World {
       const squads = [...this.squads.values()].filter((q) => q.kind === NPC_GIGN).length;
       if (squads < Math.min(3, 1 + Math.floor(this.gunShots / 60))) this.spawnSquad(false, NPC_GIGN);
     }
+    this.looterT -= dt;
+    if (this.looterT <= 0) {
+      this.looterT = 30;
+      const n = this.npcs.filter((x) => x.kind === NPC_LOOTER && x.st !== 'down').length;
+      if (n < (this.d.looters || 0) && this.duration - this.time > 120) this.spawnLooter();
+    }
     this.gjT -= dt;
     if (this.gjT <= 0) {
       this.gjT = 30;
@@ -1177,6 +1403,7 @@ export class World {
       }
       if (n.kind === NPC_CRS) this.stepCrs(n, ndt);
       else if (n.kind === NPC_GIGN) this.stepGign(n, ndt);
+      else if (n.kind === NPC_LOOTER) this.stepLooter(n, ndt);
       else if (n.kind === NPC_GJ) {
         const g = this.corteges.find((c) => c.id === n.grp);
         this.stepGJ(n, ndt, g);
@@ -1275,7 +1502,8 @@ export class World {
         let f = (n.moving ? F.MOVE : 0) | (n.running ? F.RUN : 0) | (n.st === 'down' ? F.DOWN : 0);
         if (this.time - n.atkT < 0.3) f |= n.mode === 'throw' ? F.THROW : F.ATTACK;
         if (this.time < n.stunU) f |= F.STUN;
-        np.push([n.id, n.kind, r2(n.x), r2(n.z), r2(n.rot), f]);
+        if (n.kind === NPC_LOOTER) np.push([n.id, n.kind, r2(n.x), r2(n.z), r2(n.rot), f, n.wid, n.inv.length]);
+        else np.push([n.id, n.kind, r2(n.x), r2(n.z), r2(n.rot), f]);
       }
       const rl = p.reloading ? r2(Math.max(0, p.reloadU - this.time)) : 0;
       p.send({
