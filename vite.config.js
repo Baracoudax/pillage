@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: 'client',
+  // sous-dossier de publication (GitHub Pages : /<dépôt>/)
+  base: process.env.BASE || '/',
   publicDir: 'public',
   build: {
     outDir: '../dist',

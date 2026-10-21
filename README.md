@@ -7,7 +7,16 @@ meilleur équipement et débloquer des quartiers plus riches.
 
 ## Lancer le jeu
 
+**Sans rien installer** : la version solo est publiée automatiquement sur GitHub Pages à chaque mise à jour
+(https://baracoudax.github.io/pillage/, une fois Pages activé dans les réglages du dépôt : *Settings → Pages →
+Source : GitHub Actions*).
+
+**Sur son ordinateur** (solo + multijoueur) : installer [Node.js](https://nodejs.org) **version 20.19 ou plus récente**
+(prendre la version « LTS »), puis dans un terminal :
+
 ```bash
+git clone https://github.com/Baracoudax/pillage
+cd pillage
 npm install
 npm run build      # compile le client dans dist/
 npm start          # serveur : http://localhost:8080 (jeu + multijoueur)
