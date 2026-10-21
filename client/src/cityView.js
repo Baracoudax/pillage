@@ -6,11 +6,12 @@ import { BLOCK, STREET, WALL_H } from '../../shared/map.js';
 import { SHOP_TYPES } from '../../shared/config.js';
 import { ITEMS, RARITY } from '../../shared/items.js';
 import { getModel } from './assets.js';
+import { CityDetail, DETAIL_MODEL_PATHS, loadTexture, shelfTexture, modelParts } from './cityDetail.js';
 
 // Modèles 3D (Kenney City Kit Commercial, packs CC0 3dmodelscc0)
 export const BUILDINGS = ['building-a', 'building-b', 'building-c', 'building-d', 'building-e', 'building-f', 'building-g', 'building-h', 'building-i', 'building-j', 'building-k', 'building-l', 'building-m', 'building-n'];
 export const TOWERS = ['building-skyscraper-a', 'building-skyscraper-b', 'building-skyscraper-c', 'building-skyscraper-d', 'building-skyscraper-e'];
-export const DECOR_MODELS = { bench: ['props/StreetBench', 1], trash: ['props/PlasticTrashBin', 1], mailbox: ['props/CityMailBox', 1], payphone: ['props/Payphone', 1.2], atm: ['props/ATM', 1.25], ebox: ['props/RealisticElectricalBox', 1], busstop: ['props/Bus_Stop', 1], cone: ['props/Traffic_Cone', 1.3], portaloo: ['props/Portaloo', 1], dumpster: ['props/Dumpster', 1], roadblock: ['props/RoadBlock', 2] };
+export const DECOR_MODELS = { bench: ['props/StreetBench', 1], trash: ['props/PlasticTrashBin', 1], mailbox: ['props/CityMailBox', 1], payphone: ['props/Payphone', 1.2], atm: ['props/ATM', 1.25], ebox: ['props/RealisticElectricalBox', 1], busstop: ['props/Bus_Stop', 1], cone: ['props/Traffic_Cone', 1.3], portaloo: ['props/Portaloo', 1], dumpster: ['props/Dumpster', 1], roadblock: ['props/RoadBlock', 2], tree: ['street/tree-large', 8], treeS: ['street/tree-small', 8.5], tlight: ['street/traffic-light', 6.4] };
 // objet de butin -> [modèle, taille max (m)]
 export const LOOT_MODELS = {
   console: ['loot/Console', 0.32], enceinte: ['loot/Radio', 0.3], radio: ['loot/Radio', 0.34], micro: ['loot/Microphone', 0.35], casque_vr: ['loot/VRGoggles', 0.22],
@@ -18,7 +19,7 @@ export const LOOT_MODELS = {
   surgeles: ['loot/FrozenPizza', 0.32], thon: ['loot/Canned_Tuna', 0.12], lait: ['loot/Milk', 0.3], glace: ['loot/Ice_Cream', 0.25], tartiner: ['loot/CannedFood', 0.2],
 };
 export const CITY_MODEL_PATHS = [...BUILDINGS, ...TOWERS].map((b) => 'city/' + b)
-  .concat(Object.values(DECOR_MODELS).map((x) => x[0]), [...new Set(Object.values(LOOT_MODELS).map((x) => x[0]))]);
+  .concat(Object.values(DECOR_MODELS).map((x) => x[0]), [...new Set(Object.values(LOOT_MODELS).map((x) => x[0]))], DETAIL_MODEL_PATHS);
 
 // géométrie unique d'un modèle (transformée du nœud appliquée), matériau Lambert (léger)
 function flatModel(path) {
@@ -38,7 +39,7 @@ function flatModel(path) {
 const _c = new THREE.Color();
 
 // Boîte axis-aligned avec couleur par sommet. uvMode 'facade' => UV en mètres pour la texture de fenêtres.
-function box(x0, y0, z0, x1, y1, z1, color, uvMode) {
+function box(x0, y0, z0, x1, y1, z1, color, uvMode, uvScale = 2) {
   const w = x1 - x0, h = y1 - y0, d = z1 - z0;
   const g = new THREE.BoxGeometry(w, h, d);
   g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
@@ -47,6 +48,19 @@ function box(x0, y0, z0, x1, y1, z1, color, uvMode) {
   _c.set(color);
   for (let i = 0; i < n; i++) { col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  if (uvMode === 'world' || uvMode === 'shelf') {
+    // UV en mètres (texture répétée) ; 'shelf' : la face avant/arrière couvre la hauteur du meuble
+    const uv = g.attributes.uv, sc = uvScale;
+    const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+    const offs = [[z0, y0], [z0, y0], [x0, z0], [x0, z0], [x0, y0], [x0, y0]];
+    for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) {
+      const i = f * 4 + k;
+      if (uvMode === 'shelf') {
+        if (f === 2 || f === 3) { uv.setXY(i, 0.01, 0.99); continue; }
+        uv.setXY(i, (uv.getX(i) * dims[f][0] + offs[f][0]) / sc, uv.getY(i) * 0.98 + 0.01);
+      } else uv.setXY(i, (uv.getX(i) * dims[f][0] + offs[f][0]) / sc, (uv.getY(i) * dims[f][1] + offs[f][1]) / sc);
+    }
+  }
   if (uvMode === 'facade') {
     const uv = g.attributes.uv;
     // ordre des faces BoxGeometry : +x, -x, +y, -y, +z, -z (4 sommets chacune)
@@ -132,18 +146,22 @@ export class CityView {
     const S = map.size;
 
     // sol
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x3b3d44 });
+    const asphalt = loadTexture('asphalt_02');
+    asphalt.repeat.set((S + 60) / 5, (S + 60) / 5);
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x8a8c94, map: asphalt });
     const ground = add(new THREE.Mesh(new THREE.PlaneGeometry(S + 60, S + 60), groundMat));
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(S / 2, 0, S / 2);
     ground.receiveShadow = q.shadows;
 
     // trottoirs + marquages
-    const walk = [], marks = [];
+    const walk = [], marks = [], floors = [];
     const P = BLOCK + STREET;
     for (let i = 0; i < map.d.size; i++) for (let j = 0; j < map.d.size; j++) {
       const x = STREET + i * P, z = STREET + j * P;
-      walk.push(box(x, 0, z, x + BLOCK, 0.14, z + BLOCK, 0x6b6a67));
+      walk.push(box(x, 0, z, x + BLOCK, 0.14, z + BLOCK, 0x9a9894, 'world', 2.5));
+      // bordure de trottoir en granit
+      for (const [a0, b0, a1, b1] of [[x, z, x + BLOCK, z + 0.25], [x, z + BLOCK - 0.25, x + BLOCK, z + BLOCK], [x, z, x + 0.25, z + BLOCK], [x + BLOCK - 0.25, z, x + BLOCK, z + BLOCK]]) marks.push(box(a0, 0.005, b0, a1, 0.15, b1, 0x6f6e6a));
     }
     for (let i = 0; i <= map.d.size; i++) {
       const c = i * P + STREET / 2;
@@ -155,12 +173,14 @@ export class CityView {
     // sols des magasins
     for (const f of map.floors) {
       _c.set(SHOP_TYPES[f.type].floor);
-      walk.push(box(f.x0, 0, f.z0, f.x1, 0.16, f.z1, _c.getHex()));
+      _c.lerp(new THREE.Color(0xffffff), 0.45);
+      floors.push(box(f.x0, 0, f.z0, f.x1, 0.16, f.z1, _c.getHex(), 'world', 2));
     }
     const vcMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    const walkMesh = add(new THREE.Mesh(mergeGeometries(walk), vcMat));
+    const walkMesh = add(new THREE.Mesh(mergeGeometries(walk), new THREE.MeshLambertMaterial({ vertexColors: true, map: loadTexture('concrete_pavement') })));
     walkMesh.receiveShadow = q.shadows;
-    add(new THREE.Mesh(mergeGeometries(marks), new THREE.MeshBasicMaterial({ vertexColors: true })));
+    if (floors.length) add(new THREE.Mesh(mergeGeometries(floors), new THREE.MeshLambertMaterial({ vertexColors: true, map: loadTexture('interior_tiles') }))).receiveShadow = q.shadows;
+    add(new THREE.Mesh(mergeGeometries(marks), vcMat));
 
     // immeubles : modèles Kenney (2x2 par parcelle) quand ils sont chargés, sinon blocs à fenêtres
     const ft = facadeTextures();
@@ -174,26 +194,16 @@ export class CityView {
 
     // murs, étagères, comptoirs des magasins
     const walls = [], shelves = [], goods = [];
-    for (const s of map.solids) if (s.kind === 'wall') walls.push(box(s.x0, 0, s.z0, s.x1, WALL_H, s.z1, 0xd9d4c7));
+    for (const s of map.solids) if (s.kind === 'wall') walls.push(box(s.x0, 0, s.z0, s.x1, WALL_H, s.z1, 0xe8e2d6, 'world', 3));
     for (const s of map.shelves) {
-      const col = s.kind === 'counter' ? 0x6d4c33 : 0x9aa1a8;
-      shelves.push(box(s.x0, 0, s.z0, s.x1, s.h, s.z1, col));
-      // marchandises renversées en vrac (décor)
-      if (s.kind === 'shelf') {
-        const lx = s.x1 - s.x0, lz = s.z1 - s.z0;
-        for (let k = 0; k < 6; k++) {
-          const u = (k + 0.5) / 6;
-          const x = lx > lz ? s.x0 + lx * u : (s.x0 + s.x1) / 2;
-          const z = lx > lz ? (s.z0 + s.z1) / 2 : s.z0 + lz * u;
-          const hue = (k * 0.17 + s.x0 * 0.01) % 1;
-          _c.setHSL(hue, 0.5, 0.45);
-          goods.push(box(x - 0.18, s.h * 0.45, z - 0.18, x + 0.18, s.h * 0.45 + 0.3, z + 0.18, _c.getHex()));
-        }
-      }
+      // rayonnages : texture de produits ; comptoirs : bois
+      if (s.kind === 'shelf') shelves.push(box(s.x0, 0, s.z0, s.x1, s.h, s.z1, 0xffffff, 'shelf', 2));
+      else goods.push(box(s.x0, 0, s.z0, s.x1, s.h, s.z1, 0x6d4c33));
     }
-    const wallMesh = add(new THREE.Mesh(mergeGeometries(walls), vcMat));
+    const wallMesh = add(new THREE.Mesh(mergeGeometries(walls), new THREE.MeshLambertMaterial({ vertexColors: true, map: loadTexture('painted_plaster_wall') })));
     wallMesh.castShadow = wallMesh.receiveShadow = q.shadows;
-    add(new THREE.Mesh(mergeGeometries([...shelves, ...goods]), vcMat));
+    if (shelves.length) add(new THREE.Mesh(mergeGeometries(shelves), new THREE.MeshLambertMaterial({ vertexColors: true, map: shelfTexture() })));
+    if (goods.length) add(new THREE.Mesh(mergeGeometries(goods), vcMat));
 
     // enseignes (atlas de texte unique)
     const atlas = signAtlas();
@@ -218,9 +228,11 @@ export class CityView {
 
     // voitures et barricades
     const props = [];
+    const kenneyCars = !!modelParts('cars/sedan');
     for (const p of map.props) {
       const s = p.solid;
-      if (p.type === 'car') {
+      if ((p.type === 'car' || p.type === 'police') && kenneyCars) continue;
+      if (p.type === 'car' || p.type === 'police') {
         const col = p.burning ? 0x1b1715 : [0x7a1f1f, 0x2e4a6b, 0x9b9b9b, 0x2b2b2b, 0xd6d0c4][Math.floor(p.x * 7 + p.z) % 5];
         props.push(box(s.x0, 0.25, s.z0, s.x1, 0.95, s.z1, col));
         const ix = (s.x1 - s.x0) * 0.2, iz = (s.z1 - s.z0) * 0.2;
@@ -267,6 +279,7 @@ export class CityView {
     add(new THREE.Mesh(mergeGeometries(haloGeo), new THREE.MeshBasicMaterial({ map: halo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
 
     this.decorProps(map, q);
+    this.detail = new CityDetail(scene, map, q, this.objects);
 
     // points d'extraction
     this.exitMeshes = map.exits.map((e) => {
@@ -448,6 +461,7 @@ export class CityView {
       x.beam.material.opacity = active ? 0.1 + Math.sin(t * 3) * 0.04 : 0.05;
     }
     this.marker.rotation.y = t * 3;
+    this.detail.update(t);
   }
 
   dispose() {

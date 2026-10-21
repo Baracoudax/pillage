@@ -5,6 +5,7 @@ import { PLAYER, SHOP_TYPES } from '../../shared/config.js';
 import { ITEMS, RARITY, GEAR_BY_ID, WEAPONS, THROWABLES, THROW_ORDER, CONSUMABLES, invValue, holdTime } from '../../shared/items.js';
 import { F, NPC_CRS, NPC_GJ, NPC_GIGN, NPC_LOOTER } from '../../shared/world.js';
 import { CityView, CITY_MODEL_PATHS } from './cityView.js';
+import { Heli } from './heli.js';
 import { CharacterRenderer, appearance } from './chars.js';
 import { Fx } from './fx.js';
 import { ViewModel } from './viewmodel.js';
@@ -80,6 +81,7 @@ export class Raid {
     this.city = new CityView(scene, this.map, this.q);
     this.chars = new CharacterRenderer(scene, this.q.shadows);
     this.fx = new Fx(scene, this.q, this.map);
+    this.heli = new Heli(scene);
     this.vm = new ViewModel(this.gfx.renderer);
     // personnages 3D animés à proximité, silhouettes instanciées au-delà
     this.humans = new HumanPool(scene, this.q);
@@ -91,7 +93,7 @@ export class Raid {
     this.me = {
       x: welcome.x, z: welcome.z, rot: 0, hp: PLAYER.hp, stamina: PLAYER.stamina, inv: [], w: 0, cap: welcome.cap,
       stun: 0, gas: 0, ex: 0, ammo: {}, thr: {}, mg: { primary: 0, sidearm: 0 }, cur: this.wp.primary ? 'primary' : this.wp.sidearm ? 'sidearm' : 'melee', rl: 0, cr: 0,
-      band: this.lo.cons.bandage, phase: 0, moving: false, sprint: false, crouch: false,
+      band: this.lo.cons.bandage, phase: 0, moving: false, sprint: false, crouch: false, y: 0, vy: 0, grounded: true,
     };
     this.local = { mg: null, lastShot: -9, fireU: 0, meleeU: 0, throwU: 0, reloadEnd: 0, reloadDur: 1 };
     this.throwSel = 'pierre';
@@ -107,6 +109,7 @@ export class Raid {
     this.ended = false;
     this.paused = false;
     this.labels = new Map();
+    this.alarms = [];
     this.hudT = 0;
     this.lastHurt = 0;
     this.flashK = 0;
@@ -236,6 +239,7 @@ export class Raid {
     $('timer').textContent = fmtTime(left);
     $('timer').classList.toggle('warn', left < 60);
     $('heatFill').style.width = this.heat + '%';
+    this.compass();
     $('wTxt').textContent = `${me.w.toFixed(1)} / ${me.cap} kg`;
     $('wFill').style.width = Math.min(100, (me.w / me.cap) * 100) + '%';
     $('vTxt').textContent = `${invValue(me.inv)} €`;
@@ -248,8 +252,10 @@ export class Raid {
     const th = THROWABLES[this.throwSel];
     $('throwTxt').textContent = `${th.icon} ${th.name} x${me.thr[this.throwSel] ?? 0}`;
     $('bandTxt').textContent = `🩹 ${me.band}`;
-    $('crowd').className = me.cr ? 'on' + (me.cr === 2 ? ' best' : '') : '';
-    $('crowd').textContent = me.cr === 2 ? '🦺 Fondu dans le cortège : invisible pour les CRS' : '🦺 Dans le cortège : discret';
+    const rep = Math.max(0, Math.ceil((this.gjRepU || 0) - performance.now() / 1000));
+    $('crowd').className = me.cr ? 'on' + (me.cr === 2 ? ' best' : '') : rep ? 'on' : '';
+    $('crowd').textContent = me.cr === 2 ? '🦺 Fondu dans le cortège : invisible pour les CRS' + (rep ? ` · protégé ${Math.floor(rep / 60)}:${String(rep % 60).padStart(2, '0')}` : '')
+      : me.cr ? '🦺 Dans le cortège : discret' : `🦺 Les gilets jaunes te couvrent encore ${Math.floor(rep / 60)}:${String(rep % 60).padStart(2, '0')} : rejoins un cortège`;
     const ex = this.exits.map((e) => {
       const d = Math.hypot(e.x - me.x, e.z - me.z);
       const a = angDiff(Math.atan2(e.x - me.x, e.z - me.z), this.cam.yaw);
@@ -290,6 +296,8 @@ export class Raid {
         this.time = m.tm;
         this.timeBase = now - m.tm;
         this.heat = m.h;
+        this.heli.set(m.hl);
+        this.audio.setTension(m.h);
         const seenP = new Set(), seenN = new Set();
         for (const [id, x, z, rot, f, hp, pack, tenue, wid, pitch] of m.p) {
           let p = this.players.get(id);
@@ -334,28 +342,28 @@ export class Raid {
       case 'shot': {
         const d = Math.hypot(m.o[0] - this.me.x, m.o[2] - this.me.z);
         for (const e of m.e) { this.fx.tracer(m.o[0], m.o[1] - 0.1, m.o[2], e[0], e[1], e[2]); this.fx.impact(e[0], e[1], e[2], e[3]); }
-        this.audio.play(WEAPONS[m.w]?.slot === 'sidearm' ? 'pistol' : m.w === 'shotgun' ? 'shotgun' : 'rifle', d);
+        this.audio.at(WEAPONS[m.w]?.slot === 'sidearm' ? 'pistol' : m.w === 'shotgun' ? 'shotgun' : 'rifle', m.o[0], m.o[2]);
         break;
       }
       case 'proj': {
         this.fx.addProj(m);
         const d = Math.hypot(m.x - this.me.x, m.z - this.me.z);
-        if (m.k === 'lbd') this.audio.play('lbd', d);
-        else if (m.k === 'fusee') this.audio.play('flare', d);
-        else this.audio.play('swing', d);
+        if (m.k === 'lbd') this.audio.at('lbd', m.x, m.z);
+        else if (m.k === 'fusee') this.audio.at('flare', m.x, m.z);
+        else this.audio.at('swing', m.x, m.z);
         break;
       }
       case 'projend': this.fx.endProj(m); break;
       case 'fx': {
         const d = Math.hypot(m.x - this.me.x, m.z - this.me.z);
-        if (m.k === 'hit') { this.fx.hit(m.x, m.y, m.z); this.audio.play('hit', d); }
-        else if (m.k === 'boom' || m.k === 'flare' || m.k === 'firework') { this.fx.boom(m.x, m.y, m.z); this.audio.play('boom', d); this.shake = Math.max(this.shake || 0, Math.max(0, 0.5 - d / 40)); }
-        else if (m.k === 'gas') { this.fx.addGas(m.x, m.z, m.r, m.ttl); this.audio.play('gas', d); }
-        else if (m.k === 'smoke') { this.fx.addSmoke(m.x, m.z, m.r, m.ttl); this.audio.play('gas', d); }
-        else if (m.k === 'fire') { this.fx.addFire(m.x, m.z, m.r, m.ttl); this.audio.play('glass', d); }
+        if (m.k === 'hit') { this.fx.hit(m.x, m.y, m.z); this.audio.at('hit', m.x, m.z); }
+        else if (m.k === 'boom' || m.k === 'flare' || m.k === 'firework') { this.fx.boom(m.x, m.y, m.z); this.audio.at('boom', m.x, m.z); this.shake = Math.max(this.shake || 0, Math.max(0, 0.5 - d / 40)); }
+        else if (m.k === 'gas') { this.fx.addGas(m.x, m.z, m.r, m.ttl); this.audio.at('gas', m.x, m.z); }
+        else if (m.k === 'smoke') { this.fx.addSmoke(m.x, m.z, m.r, m.ttl); this.audio.at('gas', m.x, m.z); }
+        else if (m.k === 'fire') { this.fx.addFire(m.x, m.z, m.r, m.ttl); this.audio.at('glass', m.x, m.z); }
         else if (m.k === 'flash') {
           this.fx.bigFlash(m.x, m.y, m.z);
-          this.audio.play('boom', d);
+          this.audio.at('boom', m.x, m.z);
           // aveuglement si on regarde vers l'explosion
           if (d < m.r * 2.2 && this.map.los(this.me.x, this.me.z, m.x, m.z)) {
             const facing = Math.cos(angDiff(Math.atan2(m.x - this.me.x, m.z - this.me.z), this.cam.yaw));
@@ -386,6 +394,19 @@ export class Raid {
         this.audio.play('pick');
         break;
       }
+      case 'alarm': {
+        this.alarms.push({ x: m.x, z: m.z, t: now + 25 });
+        const d = Math.hypot(m.x - this.me.x, m.z - this.me.z);
+        this.audio.at('alarm', m.x, m.z);
+        if (d < 25) this.toast('🚨 L’alarme du magasin s’est déclenchée !', 'danger');
+        break;
+      }
+      case 'helion': this.toast('🚁 Un hélicoptère de la police survole le quartier. Évite son projecteur ou reste à couvert.', 'danger', 5000); break;
+      case 'heli': this.toast('🚁 L’hélicoptère t’a pris dans son projecteur : les CRS arrivent !', 'danger', 4000); this.audio.play('spotted'); break;
+      case 'dispatch': this.toast(`📻 Une escouade de CRS est envoyée sur place (${m.d} m)`, 'danger', 3500); break;
+      case 'gjsell': this.toast(m.v ? `Receleur solidaire : butin échangé contre ${m.v} € en liasses` : 'Rien à vendre au receleur', m.v ? 'loot' : 'warn', 3500); if (m.v) this.audio.play('cash'); break;
+      case 'gjgift': this.gjRepU = performance.now() / 1000 + 180; this.toast(`Les gilets jaunes te remercient (${ITEMS[m.item].name}) : ils te couvrent pendant 3 min`, 'loot', 4000); break;
+      case 'gjangry': this.toast('Gazé, le cortège riposte contre les CRS !', 'warn'); break;
       case 'rival': this.toast('Un pilleur rival veut ton butin !', 'warn'); break;
       case 'rivalko': this.toast(`Pilleur rival K.O. ! Fouille son sac (≈ ${m.v} €).`, 'loot', 3500); break;
       case 'rivalout': this.toast('Un pilleur rival s’est extrait avec son butin.'); break;
@@ -457,7 +478,7 @@ export class Raid {
     this.sendT += dt;
     if (this.sendT >= SEND_DT && !this.ended) {
       this.sendT = 0;
-      this.tr.send({ t: 'state', x: Math.round(me.x * 100) / 100, z: Math.round(me.z * 100) / 100, r: Math.round(this.cam.yaw * 100) / 100, p: Math.round(this.cam.pitch * 100) / 100, c: inp.crouch ? 1 : 0, s: me.sprint ? 1 : 0, m: me.moving ? 1 : 0 });
+      this.tr.send({ t: 'state', x: Math.round(me.x * 100) / 100, z: Math.round(me.z * 100) / 100, r: Math.round(this.cam.yaw * 100) / 100, p: Math.round(this.cam.pitch * 100) / 100, c: inp.crouch ? 1 : 0, s: me.sprint ? 1 : 0, m: me.moving ? 1 : 0, y: Math.round(me.y * 100) / 100 });
     }
 
     this.drawWorld(dt, now, inp);
@@ -498,9 +519,26 @@ export class Raid {
       sp *= 1 - 0.3 * Math.min(1, me.w / me.cap);
       if (me.gas) sp *= 0.6;
       if (wantAds) sp *= 0.6;
-      [me.x, me.z] = this.map.move(me.x, me.z, dx * sp * dt, dz * sp * dt, PLAYER.radius);
-      me.phase += dt * sp * 2.2;
+      if (!me.grounded) sp *= 0.9;
+      [me.x, me.z] = this.map.move(me.x, me.z, dx * sp * dt, dz * sp * dt, PLAYER.radius, me.y);
+      if (me.grounded) {
+        const ph0 = Math.floor(me.phase / Math.PI);
+        me.phase += dt * sp * 2.2;
+        if (Math.floor(me.phase / Math.PI) !== ph0 && !me.crouch) this.audio.play('step');
+      }
     }
+    // saut : on franchit barricades, bancs, capots... et on peut monter sur une voiture
+    if (inp.pressed.has('jump') && me.grounded && me.stun <= 0 && me.stamina > 6) {
+      me.vy = 6.8; me.grounded = false; me.stamina -= 6;
+      this.audio.play('jump');
+    }
+    me.vy -= 20 * dt;
+    me.y += me.vy * dt;
+    const ground = this.map.groundAt(me.x, me.z, PLAYER.radius, me.y);
+    if (me.y <= ground) {
+      if (!me.grounded && me.vy < -4) { this.cam.land = Math.min(0.2, -me.vy * 0.02); this.audio.play('land'); }
+      me.y = ground; me.vy = 0; me.grounded = true;
+    } else if (me.y > ground + 0.05) me.grounded = false;
     me.moving = moving;
     me.crouch = inp.crouch;
     me.rot = this.cam.yaw;
@@ -597,7 +635,7 @@ export class Raid {
     this.audio.play(w.slot === 'sidearm' && !w.proj ? 'pistol' : w.pellets ? 'shotgun' : w.proj ? 'flare' : w.zoom ? 'sniper' : 'rifle');
     if (w.proj) return;
     // traçante locale immédiate (l'impact réel est calculé par le serveur)
-    const eye = this.cam.eye;
+    const eye = me.y + this.cam.eye;
     const cp = Math.cos(pitch);
     const dx = Math.sin(yaw) * cp, dy = Math.sin(pitch), dz = Math.cos(yaw) * cp;
     const t = this.map.ray3(me.x, eye, me.z, dx, dy, dz, w.range);
@@ -655,6 +693,9 @@ export class Raid {
       const s = tgt.bag ? this.city.bags.get(tgt.id) : this.map.lootSpots[tgt.id];
       this.city.marker.visible = true;
       this.city.marker.position.set(s.x, (s.y ?? 0.4) + 0.35 + Math.sin(now * 4) * 0.03, s.z);
+    } else if (this.gjAction(inp, prompt)) {
+      $('btnUse')?.classList.add('ready');
+      this.city.marker.visible = false;
     } else {
       prompt.classList.remove('on');
       $('btnUse')?.classList.remove('ready');
@@ -664,9 +705,58 @@ export class Raid {
     }
   }
 
+  // Boussole : points cardinaux, sorties, rond-point des gilets jaunes, hélicoptère
+  compass() {
+    const me = this.me, W = (this.compassW ||= $('compass').clientWidth || 320);
+    if (!this.compassEls) {
+      const root = $('compassIn');
+      root.innerHTML = '';
+      const mk = (txt, cls) => { const e = document.createElement('span'); e.textContent = txt; if (cls) e.className = cls; root.appendChild(e); return e; };
+      const marks = [['N', 0, Math.PI], ['E', 0, Math.PI / 2], ['S', 0, 0], ['O', 0, -Math.PI / 2]].map(([t, , a]) => ({ el: mk(t, 'card'), a: () => a }));
+      for (const e of this.exits) marks.push({ el: mk('⬤', 'exit'), a: () => Math.atan2(e.x - me.x, e.z - me.z), on: () => this.time >= e.activeFrom });
+      const r = this.map.roundabout;
+      marks.push({ el: mk('🦺', 'gj'), a: () => Math.atan2(r.x - me.x, r.z - me.z) });
+      marks.push({ el: mk('🚁', 'heli'), a: () => Math.atan2(this.heli.hx - me.x, this.heli.hz - me.z), on: () => this.heli.on });
+      this.compassEls = marks;
+    }
+    for (const m of this.compassEls) {
+      const rel = angDiff(m.a(), this.cam.yaw);
+      const vis = Math.abs(rel) < 1.4 && (!m.on || m.on());
+      m.el.style.display = vis ? '' : 'none';
+      if (vis) m.el.style.transform = `translateX(${(W / 2 + rel * (W / 2.8)).toFixed(1)}px) translateX(-50%)`;
+    }
+  }
+
+  // receleur solidaire du rond-point, dons de nourriture au cortège
+  gjAction(inp, prompt) {
+    const me = this.me, key = this.app.input.touch ? '' : '[E] ';
+    const r = this.map.roundabout;
+    if (Math.hypot(me.x - r.x, me.z - r.z) < 6.5) {
+      const v = me.inv.filter((id) => !id.startsWith('liasse') && !id.startsWith('w_')).reduce((s, id) => s + ITEMS[id].value, 0);
+      if (v > 0) {
+        prompt.innerHTML = `${key}Vendre au <b style="color:#d7f20f">receleur solidaire</b> : ${Math.round(v * 0.6)} € en liasses (60 %), sac allégé`;
+        prompt.classList.add('on');
+        if (inp.pressed.has('interact')) this.tr.send({ t: 'act', a: 'sellgj' });
+        return true;
+      }
+    }
+    const food = me.inv.findIndex((id) => ITEMS[id].shops.includes('superette'));
+    if (food >= 0) {
+      for (const n of this.npcs.values()) {
+        if (n.kind !== NPC_GJ || !n.last || n.last.f & F.DOWN) continue;
+        if (Math.hypot(n.last.x - me.x, n.last.z - me.z) > 3) continue;
+        prompt.innerHTML = `${key}Donner <b>${ITEMS[me.inv[food]].icon} ${ITEMS[me.inv[food]].name}</b> aux gilets jaunes (ils te couvriront)`;
+        prompt.classList.add('on');
+        if (inp.pressed.has('interact')) this.tr.send({ t: 'act', a: 'give', i: food });
+        return true;
+      }
+    }
+    return false;
+  }
+
   // objet visé : le plus proche de l'axe du regard, à portée de main
   findTarget() {
-    const me = this.me, R = PLAYER.pickRange + 0.3, eye = this.cam.eye;
+    const me = this.me, R = PLAYER.pickRange + 0.3, eye = me.y + this.cam.eye;
     const cp = Math.cos(this.cam.pitch);
     const fx = Math.sin(this.cam.yaw) * cp, fy = Math.sin(this.cam.pitch), fz = Math.cos(this.cam.yaw) * cp;
     let best = null, bs = 1e9;
@@ -777,13 +867,20 @@ export class Raid {
     }
     for (const [id, g] of this.remoteGuns) if (typeof id === 'string' && !this.npcs.has(Number(id.slice(1)))) { this.scene.remove(g.obj); this.remoteGuns.delete(id); }
     this.chars.end();
+    // alarmes de magasins : gyrophare rouge clignotant à la porte
+    for (let i = this.alarms.length - 1; i >= 0; i--) {
+      const a = this.alarms[i];
+      if (now > a.t) { this.alarms.splice(i, 1); continue; }
+      if (Math.floor(now * 4) % 2 === 0 && (a.x - me.x) ** 2 + (a.z - me.z) ** 2 < 3600) this.fx.flash(a.x, 3, a.z, 0xff2020, 0.05);
+    }
 
     // caméra à la première personne
     const cam = this.gfx.camera;
     const eyeT = me.crouch ? 1.15 : 1.6;
     this.cam.eye += (eyeT - this.cam.eye) * Math.min(1, dt * 10);
     const bob = me.moving ? Math.sin(me.phase * 2) * (me.sprint ? 0.045 : 0.025) * (1 - this.adsK * 0.8) : 0;
-    let cx = me.x, cy = this.cam.eye + bob, cz = me.z;
+    this.cam.land = Math.max(0, (this.cam.land || 0) - dt * 0.6);
+    let cx = me.x, cy = me.y + this.cam.eye + bob - this.cam.land, cz = me.z;
     const sh = this.shake || 0;
     if (sh > 0) { cx += (Math.random() - 0.5) * sh * 0.3; cy += (Math.random() - 0.5) * sh * 0.3; this.shake = Math.max(0, sh - dt * 1.5); }
     cam.position.set(cx, cy, cz);
@@ -797,6 +894,9 @@ export class Raid {
     this.fx.setScale(this.gfx.renderer.domElement.height, cam.fov);
     this.fx.update(dt, cam.position, this.map.fires);
     this.city.update(now, this.time);
+    this.audio.listener.x = me.x; this.audio.listener.z = me.z; this.audio.listener.yaw = this.cam.yaw;
+    const hd = this.heli.update(dt, now, cam.position);
+    this.audio.setRotor(this.heli.on ? hd : null);
   }
 
   label(id, x, z, down) {
@@ -820,6 +920,7 @@ export class Raid {
   dispose() {
     this.audio.stopAmbience();
     this.city.dispose();
+    this.heli.dispose();
     this.chars.dispose();
     this.humans.dispose();
     this.fx.dispose();

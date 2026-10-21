@@ -295,11 +295,15 @@ export class HumanPool {
     const want = cands.filter((c) => c.d2 < this.range2).sort((a, b) => a.d2 - b.d2).slice(0, this.cap);
     const keep = new Set(want.map((c) => c.key));
     for (const [k, hu] of this.byKey) if (!keep.has(k)) { hu.dispose(this.scene); this.byKey.delete(k); }
-    for (const c of want) if (!this.byKey.has(c.key)) {
+    // créations étalées sur plusieurs passes pour éviter les à-coups
+    let budget = 3;
+    for (const c of want) if (!this.byKey.has(c.key) && budget-- > 0) {
       const hu = new Human(this.scene, c.kind, c.h, { ...c.extra, shadows: this.shadows });
       hu.key = c.key;
       this.byKey.set(c.key, hu);
     }
+    if (budget < 0) this.assignT = 0.05;
+    for (const c of want) { const hu = this.byKey.get(c.key); if (hu) hu.lod = c.d2 < 225 ? 1 : c.d2 < 625 ? 2 : 3; }
   }
 
   has(key) { return this.byKey.has(key); }
@@ -326,7 +330,10 @@ export class HumanPool {
     // une action « une fois » en cours n'est pas interrompue par l'état suivant
     if (hu.cur && hu.curOnce && hu.cur.isRunning() && !s.down) { /* on laisse finir */ }
     else if (anim !== hu.curName || opts.once && !hu.cur?.isRunning()) { hu.play(anim, opts); hu.curOnce = !!opts.once && anim !== 'Death01'; }
-    hu.mixer.update(dt);
+    // animation des personnages lointains mise à jour 1 image sur 2 ou 3
+    hu.acc = (hu.acc || 0) + dt;
+    hu.tick = ((hu.tick || 0) + 1) % (hu.lod || 1);
+    if (hu.tick === 0 || opts.once) { hu.mixer.update(hu.acc); hu.acc = 0; }
   }
 
   dispose() { for (const hu of this.byKey.values()) hu.dispose(this.scene); this.byKey.clear(); }

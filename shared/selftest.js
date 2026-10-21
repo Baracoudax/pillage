@@ -118,3 +118,24 @@ for (const armed of [false, true]) {
   console.log(`rivaux : ${r0} au départ, ${looted} objets pillés en 50 s, sac lâché=${w.bags.size >= before}, arme récupérée=${gotWeapon} (${p.inv.join(', ')})`);
   if (!r0 || !gotWeapon) { console.error('ÉCHEC test rivaux'); process.exitCode = 1; }
 }
+
+// --- Alarme : piller un magasin déclenche l'alarme et une escouade de CRS est envoyée sur place
+{
+  const w = new World('cite', { seed: 21 });
+  const evs = [];
+  const p = w.addPlayer(1, 'x', {}, (m) => { if (m.t === 'ev') evs.push(m.e); });
+  p.hp = p.maxHp = 1e9;
+  const l = w.loot.find((x) => w.map.lootSpots[x.id].table !== 'caisse');
+  p.x = l.x; p.z = l.z;
+  w.pick(p, l.id);
+  const sq = [...w.squads.values()].find((s) => s.urgent);
+  const shop = w.map.shops[w.map.lootSpots[l.id].shop];
+  const d0 = sq ? Math.hypot(sq.members[0].x - shop.door.x, sq.members[0].z - shop.door.z) : -1;
+  for (let i = 0; i < 20 * 15; i++) w.step();
+  const d1 = sq ? Math.min(...sq.members.map((m) => Math.hypot(m.x - shop.door.x, m.z - shop.door.z))) : -1;
+  // cohésion : écart moyen au chef pendant la marche
+  const L = sq?.members[0];
+  const spread = sq ? sq.members.reduce((s, m) => s + Math.hypot(m.x - L.x, m.z - L.z), 0) / sq.members.length : -1;
+  console.log(`alarme : évènements ${[...new Set(evs)].join(',')} ; escouade envoyée à ${Math.round(d0)} m -> ${Math.round(d1)} m en 15 s ; écart moyen au chef ${spread.toFixed(1)} m`);
+  if (!evs.includes('alarm') || !sq || d1 >= d0) { console.error('ÉCHEC test alarme'); process.exitCode = 1; }
+}

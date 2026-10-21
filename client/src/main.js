@@ -4,6 +4,7 @@ import { Input } from './input.js';
 import { Audio } from './audio.js';
 import { Profile } from './profile.js';
 import { Raid } from './raid.js';
+import { Backdrop } from './backdrop.js';
 import { LocalTransport, NetTransport } from './net.js';
 import { DISTRICTS, DISTRICT_ORDER, SHOP_TYPES } from '../../shared/config.js';
 import { ITEMS, RARITY, GEAR, GEAR_SLOTS, GEAR_SLOT_NAMES, GEAR_BY_ID, CONSUMABLES, TIERS } from '../../shared/items.js';
@@ -25,6 +26,7 @@ input.sens = profile.d.settings.sens;
 audio.setVolume(profile.d.settings.volume);
 
 let raid = null;
+let backdrop = new Backdrop(gfx);
 let district = profile.d.lastDistrict && profile.d.unlocked[profile.d.lastDistrict] ? profile.d.lastDistrict : 'cite';
 
 const app = { gfx, input, audio, profile, endRaid };
@@ -153,6 +155,7 @@ async function startRaid0(transport, welcome, code) {
   profile.d.lastDistrict = district;
   profile.save();
   $('menu').classList.remove('on');
+  backdrop?.dispose(); backdrop = null;
   raid = new Raid(app, transport, welcome);
   // pré-compilation des shaders pendant l'écran de chargement (évite les saccades au début)
   raid.update(0);
@@ -266,6 +269,7 @@ function endRaid(m) {
 $('btnBack').onclick = () => {
   $('result').classList.remove('on');
   $('menu').classList.add('on');
+  if (!backdrop) { backdrop = new Backdrop(gfx); backdrop.start(); }
   setTab(profile.d.stash.length ? 'stash' : 'raid');
 };
 
@@ -278,13 +282,15 @@ function frame(t) {
   if (raid) {
     raid.update(dt);
     if (raid) { raid.render(); gfx.adapt(dt); }
-  }
+  } else if (backdrop && $('menu').classList.contains('on')) backdrop.render(dt);
 }
 requestAnimationFrame(frame);
 window.addEventListener('beforeunload', () => { if (raid) profile.save(); });
 render();
 refreshRooms();
 window.__pillageReady = true;
+// le décor 3D du menu se charge après l'affichage de l'interface
+setTimeout(() => backdrop?.start(), 300);
 window.addEventListener('unhandledrejection', (e) => console.error('promesse rejetée', e.reason));
 
 // accès debug depuis la console

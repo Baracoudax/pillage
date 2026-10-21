@@ -65,6 +65,9 @@ export const ITEMS = {
   sneakers_luxe:{ name: 'Sneakers de luxe', icon: '👟', value: 950, w: 1.4, r: 2, shops: ['luxe'] },
   sac_luxe:     { name: 'Sac de créateur', icon: '👜', value: 2200, w: 1, r: 3, shops: ['luxe'] },
   diamants:     { name: 'Parure de diamants', icon: '💎', value: 7000, w: 0.1, r: 4, shops: ['luxe'] },
+  // Revente au receleur solidaire du rond-point (léger, sans valeur de rayon)
+  liasse_100:   { name: 'Liasse (receleur)', icon: '💵', value: 100, w: 0.02, r: 1, shops: [] },
+  liasse_20:    { name: 'Billets (receleur)', icon: '💵', value: 20, w: 0.01, r: 0, shops: [] },
   // Caisses enregistreuses (tout magasin)
   cash_s:       { name: 'Fond de caisse', icon: '💶', value: 90, w: 0.2, r: 0, shops: ['caisse'], hold: 2.5 },
   cash_m:       { name: 'Liasse de billets', icon: '💶', value: 260, w: 0.2, r: 1, shops: ['caisse'], hold: 2.5 },

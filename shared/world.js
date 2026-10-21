@@ -58,7 +58,10 @@ export class World {
     for (let i = 0; i < this.d.rioters; i++) this.spawnRioter();
     for (let i = 0; i < Math.ceil(this.d.crsBase / 3); i++) this.spawnSquad(true);
     for (let i = 0; i < (this.d.gj || 1); i++) this.spawnCortege(i === 0);
+    { const r = this.map.roundabout; const v = this.newNpc(NPC_GJ, r.x + 1.5, r.z + 1.5); v.vendor = true; v.mode = 'vendor'; v.hp = 1e6; }
     this.looterT = 20;
+    this.alarms = new Map();
+    this.heli = { x: this.map.size / 2, z: -20, tx: this.map.size / 2, tz: this.map.size / 2, target: null, active: false, scanT: 0 };
     for (let i = 0; i < (this.d.looters || 0); i++) this.spawnLooter();
   }
 
@@ -140,6 +143,7 @@ export class World {
     p.rot = Number(m.r) || 0;
     p.pitch = Math.max(-1.5, Math.min(1.5, Number(m.p) || 0));
     p.crouch = !!m.c; p.sprint = !!m.s; p.moving = !!m.m;
+    p.y = Math.max(0, Math.min(3.2, Number(m.y) || 0));
     if (this.time < p.stunU) {
       if (Math.hypot(x - p.x, z - p.z) > 1.5) p.send({ t: 'pos', x: p.x, z: p.z });
       return;
@@ -150,7 +154,7 @@ export class World {
     let corrected = false;
     if (d > maxD) { dx *= maxD / d; dz *= maxD / d; corrected = true; }
     const nx = p.x + dx, nz = p.z + dz;
-    if (this.map.circleBlocked(nx, nz, PLAYER.radius * 0.7)) corrected = true;
+    if (this.map.circleBlocked(nx, nz, PLAYER.radius * 0.7, p.y)) corrected = true;
     else { p.x = nx; p.z = nz; }
     if (corrected) p.send({ t: 'pos', x: p.x, z: p.z });
   }
@@ -168,6 +172,8 @@ export class World {
         return;
       }
       case 'melee': return this.melee(p, Number(m.yaw) || 0);
+      case 'sellgj': return this.sellToGJ(p);
+      case 'give': return this.giveToGJ(p, m.i | 0);
       case 'throw': return this.throwItem(p, String(m.k), Number(m.yaw) || 0, Number(m.pitch) || 0);
       case 'heal':
         if (p.band > 0 && p.hp < p.maxHp && this.time > p.healU) {
@@ -197,11 +203,115 @@ export class World {
     l.taken = true;
     p.inv.push(l.item);
     this.heat = Math.min(100, this.heat + (l.item.startsWith('cash') ? 3 : 1.2));
+    this.lootNoise(p, l);
     this.hot.push({ x: l.x, z: l.z, t: this.time });
     if (this.hot.length > 20) this.hot.shift();
     this.sendInv(p);
     p.send({ t: 'ev', e: 'got', item: l.item });
     this.bcast({ t: 'loot', id });
+  }
+
+  // ---- Gilets jaunes : receleur solidaire au rond-point, dons de nourriture
+  inSafeZone(p) {
+    const r = this.map.roundabout;
+    return Math.hypot(p.x - r.x, p.z - r.z) < 14 && this.time - p.shootT > 20 && this.time - p.hitCrsT > 20;
+  }
+
+  sellToGJ(p) {
+    const r = this.map.roundabout;
+    if (Math.hypot(p.x - r.x, p.z - r.z) > 6.5) return;
+    let total = 0;
+    const keep = [];
+    for (const id of p.inv) {
+      if (id.startsWith('liasse') || id.startsWith('w_')) keep.push(id);
+      else total += ITEMS[id].value;
+    }
+    if (!total) { p.send({ t: 'ev', e: 'gjsell', v: 0 }); return; }
+    let cash = Math.round(total * 0.6);
+    const out = keep;
+    while (cash >= 100) { out.push('liasse_100'); cash -= 100; }
+    while (cash >= 20) { out.push('liasse_20'); cash -= 20; }
+    p.inv = out;
+    this.sendInv(p);
+    p.send({ t: 'ev', e: 'gjsell', v: Math.round(total * 0.6) });
+  }
+
+  giveToGJ(p, i) {
+    const id = p.inv[i];
+    if (!id || !ITEMS[id].shops.includes('superette')) return;
+    const near = this.npcs.some((n) => n.kind === NPC_GJ && n.st !== 'down' && Math.hypot(n.x - p.x, n.z - p.z) < 3.5);
+    if (!near) return;
+    p.inv.splice(i, 1);
+    p.gjRep = this.time + 180;
+    this.sendInv(p);
+    p.send({ t: 'ev', e: 'gjgift', item: id });
+  }
+
+  // Piller fait du bruit ; le premier vol dans un magasin déclenche son alarme et la police est dépêchée.
+  lootNoise(p, l) {
+    const spot = this.map.lootSpots[l.id];
+    const shop = spot && this.map.shops[spot.shop];
+    this.noise(l.x, l.z, l.item.startsWith('cash') ? 22 : 12, p);
+    p.hotT = this.time;
+    if (!shop || this.alarms.has(shop.id)) return;
+    this.alarms.set(shop.id, this.time + 60);
+    this.bcastNear(shop.door.x, shop.door.z, { t: 'ev', e: 'alarm', shop: shop.id, x: r2(shop.door.x), z: r2(shop.door.z) });
+    this.dispatch(shop.door.x, shop.door.z, p);
+  }
+
+  // envoie l'escouade de CRS libre la plus proche sur place
+  dispatch(x, z, p) {
+    let best = null, bd = 1e9;
+    for (const sq of this.squads.values()) {
+      if (sq.kind === NPC_GIGN) continue;
+      const L = sq.members.find((m) => m.st !== 'down');
+      if (!L || L.mode === 'chase') continue;
+      const d = Math.hypot(L.x - x, L.z - z);
+      if (d < bd) { bd = d; best = sq; }
+    }
+    if (!best) return;
+    best.target = { x, z }; best.retarget = this.time + 40; best.urgent = true;
+    for (const m of best.members) { m.path = null; if (p && Math.hypot(m.x - x, m.z - z) < 30) { m.mode = 'chase'; m.target = p.id; m.lx = x; m.lz = z; m.lostT = this.time; } }
+    p?.send({ t: 'ev', e: 'dispatch', d: Math.round(bd) });
+  }
+
+  // Hélicoptère de police : balaie le quartier au projecteur, suit le pilleur le plus recherché.
+  // Un joueur pris dans le faisceau, dehors et hors cortège, est signalé aux CRS.
+  stepHeli(dt, players) {
+    const h = this.heli;
+    if (!h.active) {
+      if (this.heat < 25 && this.time < 100) return;
+      h.active = true; h.lx = this.map.size / 2; h.lz = 0;
+      this.bcast({ t: 'ev', e: 'helion' });
+    }
+    h.scanT -= dt;
+    if (h.scanT <= 0) {
+      h.scanT = 5;
+      let best = null, bt = -1e9;
+      for (const p of players) { const t = p.hotT ?? -1e9; if (this.time - t < 45 && t > bt) { bt = t; best = p; } }
+      h.target = best ? best.id : null;
+      if (!best) { const m = this.map.marchPoints[Math.floor(this.rng() * this.map.marchPoints.length)]; h.tx = m.x; h.tz = m.z; }
+    }
+    const tp = h.target != null ? this.players.get(h.target) : null;
+    if (tp && tp.st === 'alive') { h.tx = tp.x + Math.sin(this.time * 0.7) * 3; h.tz = tp.z + Math.cos(this.time * 0.9) * 3; }
+    const dx = h.tx - h.lx, dz = h.tz - h.lz, d = Math.hypot(dx, dz);
+    const sp = Math.min(d, (tp ? 5.2 : 7) * dt);
+    if (d > 0.01) { h.lx += dx / d * sp; h.lz += dz / d * sp; }
+    // détection dans le faisceau
+    for (const p of players) {
+      if (Math.hypot(p.x - h.lx, p.z - h.lz) > 4.5 || p.crowd || this.inSafeZone(p) || this.indoors(p.x, p.z)) continue;
+      if (this.time - (p.heliT ?? -1e9) < 8) continue;
+      p.heliT = this.time; p.hotT = this.time;
+      h.target = p.id; h.scanT = 8;
+      p.send({ t: 'ev', e: 'heli' });
+      this.dispatch(p.x, p.z, p);
+      this.heat = Math.min(100, this.heat + 1);
+    }
+  }
+
+  indoors(x, z) {
+    for (const s of this.map.shops) if (x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1) return true;
+    return false;
   }
 
   pickBag(p, id) {
@@ -276,8 +386,8 @@ export class World {
     p.mag[p.cur]--;
     p.fireU = this.time + 60 / w.rpm;
     p.rot = yaw; p.pitch = pitch;
-    p.shootT = this.time;
-    const eye = p.crouch ? 1.15 : 1.6;
+    p.shootT = this.time; p.hotT = this.time;
+    const eye = (p.y || 0) + (p.crouch ? 1.15 : 1.6);
     if (w.proj) {
       const c = Math.cos(pitch), sx = Math.sin(yaw), sz = Math.cos(yaw);
       this.spawnProj(w.proj, p.x + sx * 0.5, eye - 0.1, p.z + sz * 0.5, sx * c * w.speed, Math.sin(pitch) * w.speed, sz * c * w.speed, p.id, 'p', { ...w, id: p.wp[p.cur] });
@@ -532,6 +642,8 @@ export class World {
         this.bcastNear(pr.x, pr.z, { t: 'fx', k: 'gas', x: r2(g.x), z: r2(g.z), r: g.r, ttl: g.ttl });
         for (const n of this.npcs) if (n.kind === NPC_GJ && n.st !== 'down' && Math.hypot(n.x - g.x, n.z - g.z) < 9) {
           n.mode = 'scatter'; n.fx = g.x; n.fz = g.z; n.scatterU = this.time + 6; n.path = null;
+          const cg = this.corteges.find((c) => c.id === n.grp);
+          if (cg && !(cg.angryU > this.time)) { cg.angryU = this.time + 30; this.bcastNear(g.x, g.z, { t: 'ev', e: 'gjangry' }); }
         }
         break;
       }
@@ -657,7 +769,7 @@ export class World {
     const sq = { id: this.nid++, members: [], target: null, retarget: 0 };
     this.squads.set(sq.id, sq);
     sq.kind = kind;
-    for (let i = 0; i < (kind === NPC_GIGN ? 4 : 3); i++) {
+    for (let i = 0; i < 4; i++) {
       let x = pt.x + (i - 1) * 1.4, z = pt.z + (this.rng() - 0.5);
       if (!this.map.walkable(x, z)) { x = pt.x; z = pt.z; }
       const n = this.newNpc(kind, x, z);
@@ -756,18 +868,37 @@ export class World {
     switch (n.mode) {
       case 'wander':
         if (!n.path || n.pi >= n.path.length) {
+          // arrivé dans un magasin : il se sert lui aussi
+          if (n.inShop) {
+            n.inShop = false;
+            let best = null, bd = 6;
+            for (const l of this.loot) {
+              if (l.taken) continue;
+              const d = Math.hypot(l.x - n.x, l.z - n.z);
+              if (d < bd) { bd = d; best = l; }
+            }
+            if (best) {
+              best.taken = true; n.atkT = this.time; n.carry = (n.carry || 0) + 1;
+              this.bcast({ t: 'loot', id: best.id });
+              this.hot.push({ x: best.x, z: best.z, t: this.time });
+              const spot = this.map.lootSpots[best.id], shop = spot && this.map.shops[spot.shop];
+              if (shop && !this.alarms.has(shop.id)) { this.alarms.set(shop.id, this.time + 60); this.bcastNear(shop.door.x, shop.door.z, { t: 'ev', e: 'alarm', shop: shop.id, x: r2(shop.door.x), z: r2(shop.door.z) }); }
+              n.idleU = this.time + 1.5;
+            }
+          }
           if (this.time > n.idleU) {
             const shops = this.map.shops;
-            const t = this.rng() < 0.3 && shops.length ? shops[Math.floor(this.rng() * shops.length)].inside : this.randomStreetNear(n.x, n.z, 35);
-            if (this.requestPath(n, t.x, t.z)) n.idleU = this.time + 1 + this.rng() * 5;
+            const goShop = this.rng() < 0.45 && shops.length;
+            const t = goShop ? shops[Math.floor(this.rng() * shops.length)].inside : this.randomStreetNear(n.x, n.z, 35);
+            if (this.requestPath(n, t.x, t.z)) { n.idleU = this.time + 1 + this.rng() * 5; n.inShop = !!goShop; }
           }
-        } else this.followPath(n, 1.9, dt);
+        } else this.followPath(n, n.carry ? 3.2 : 1.9, dt);
         break;
       case 'chase': {
         const p = this.players.get(n.target);
         if (!p || p.st !== 'alive' || this.time > n.chaseU) { n.mode = 'wander'; n.path = null; break; }
         const d = Math.hypot(p.x - n.x, p.z - n.z);
-        if (d > 22) { n.mode = 'wander'; n.path = null; break; }
+        if (d > 22 || (p.crowd && this.time < (p.gjRep || 0))) { n.mode = 'wander'; n.path = null; break; }
         if (d < 1.25) {
           n.rot = Math.atan2(p.x - n.x, p.z - n.z);
           if (this.time > n.cdU) {
@@ -853,12 +984,17 @@ export class World {
   }
 
   crsThink(n) {
+    // le cortège fait barrage : un CRS au milieu des gilets jaunes avance au ralenti
+    let gj = 0;
+    for (const o of this.npcs) if (o.kind === NPC_GJ && o.st !== 'down' && Math.abs(o.x - n.x) < 2 && Math.abs(o.z - n.z) < 2) gj++;
+    n.crowdSlow = gj >= 2 ? 0.35 : 1;
     if (n.mode === 'chase') {
       const p = this.players.get(n.target);
       const d = p ? Math.hypot(p.x - n.x, p.z - n.z) : 99;
       n.vis = !!p && p.st === 'alive' && d < 38 && this.los(n.x, n.z, p.x, p.z);
       // en gilet jaune au milieu du cortège, on se fond dans la masse
       if (n.vis && p.crowd === 2 && d > 6 && this.time - p.shootT > 3 && this.time - p.hitCrsT > 5) n.vis = false;
+      if (n.vis && this.inSafeZone(p)) n.vis = false;
       if (n.vis) { n.lx = p.x; n.lz = p.z; n.lostT = this.time; }
       return;
     }
@@ -870,7 +1006,7 @@ export class World {
       if (p.crouch) range *= 0.55;
       if (p.sprint) range *= 1.2;
       const armed = this.time - p.shootT < 20 || this.gunOut(p);
-      const suspicious = p.inv.length > 0 || armed || this.time - p.hitCrsT < 40 || d < 5;
+      const suspicious = (p.inv.length > 0 || armed || this.time - p.hitCrsT < 40 || d < 5) && !this.inSafeZone(p);
       if (!suspicious || d > Math.max(range, 3) || d > bd) continue;
       if (d > 5 && Math.abs(angDiff(Math.atan2(dx, dz), n.rot)) > 1.15) continue;
       if (!this.los(n.x, n.z, p.x, p.z)) continue;
@@ -950,8 +1086,13 @@ export class World {
         this.lobAt(n, 'gaz', p.x + (this.rng() - 0.5) * 2, p.z + (this.rng() - 0.5) * 2, n.id, 'crs');
         return;
       }
-      const speed = !n.vis || d < 14 ? 4.9 : 2.6;
-      this.navTo(n, n.vis ? p.x : n.lx, n.vis ? p.z : n.lz, speed, dt);
+      // charge en ligne : le chef suit la cible, les autres tiennent la formation puis chargent à courte distance
+      const slow = n.crowdSlow || 1;
+      const tx = n.vis ? p.x : n.lx, tz = n.vis ? p.z : n.lz;
+      const sq = this.squads.get(n.sq);
+      const slot = sq && this.formationPoint(sq, n, tx, tz);
+      if (!slot || (n.vis && d < 12)) this.navTo(n, tx, tz, (!n.vis || d < 14 ? 4.9 : 2.6) * slow, dt);
+      else this.navTo(n, slot.x, slot.z, (Math.hypot(slot.x - n.x, slot.z - n.z) > 3 ? 5.3 : 4.6) * slow, dt);
       return;
     }
     const sq = this.squads.get(n.sq);
@@ -960,16 +1101,39 @@ export class World {
       const recent = this.hot.filter((h) => this.time - h.t < 70);
       sq.target = recent.length && this.rng() < 0.65 ? recent[Math.floor(this.rng() * recent.length)] : this.randomStreetNear(n.x, n.z, 60);
       sq.retarget = this.time + 25 + this.rng() * 10;
+      sq.urgent = false;
       for (const m of sq.members) m.path = null;
     }
-    const off = (n.slot - 1) * 1.5;
-    const tx = sq.target.x + off, tz = sq.target.z + (n.slot === 1 ? 1.2 : 0);
-    if (Math.hypot(tx - n.x, tz - n.z) > 1.5) {
-      this.navTo(n, tx, tz, 2.4, dt);
+    // patrouille en formation : seul le chef calcule un chemin
+    const slot = this.formationPoint(sq, n, sq.target.x, sq.target.z);
+    const speed = (sq.urgent ? 4.6 : 2.4) * (n.crowdSlow || 1);
+    if (slot) {
+      if (Math.hypot(slot.x - n.x, slot.z - n.z) > 0.8) this.navTo(n, slot.x, slot.z, Math.hypot(slot.x - n.x, slot.z - n.z) > 3 ? speed + 1.2 : speed, dt);
+      else n.rot += angDiff(sq.members.find((m) => m.st !== 'down').rot, n.rot) * Math.min(1, dt * 4);
+      return;
+    }
+    if (Math.hypot(sq.target.x - n.x, sq.target.z - n.z) > 1.5) {
+      this.navTo(n, sq.target.x, sq.target.z, speed, dt);
     } else {
-      n.rot += dt * 0.6 * (n.slot - 1 || 0.5);
+      n.rot += dt * 0.6;
+      sq.urgent = false;
       if (sq.retarget - this.time > 6) sq.retarget = this.time + 4 + this.rng() * 3;
     }
+  }
+
+  // point de formation (ligne de boucliers perpendiculaire à la marche, chef au centre) ; null pour le chef
+  formationPoint(sq, n, tx, tz) {
+    const alive = sq.members.filter((m) => m.st !== 'down');
+    const L = alive[0];
+    if (!L || L === n) return null;
+    const idx = alive.indexOf(n);
+    const hx = tx - L.x, hz = tz - L.z, hd = Math.hypot(hx, hz) || 1;
+    const fx = hd > 0.5 ? hx / hd : Math.sin(L.rot), fz = hd > 0.5 ? hz / hd : Math.cos(L.rot);
+    const side = (idx % 2 ? 1 : -1) * Math.ceil(idx / 2) * 1.35;
+    let x = L.x - fz * side - fx * 0.5, z = L.z + fx * side - fz * 0.5;
+    // pas de place (mur) : on se range derrière le chef
+    if (!this.map.walkable(x, z)) { x = L.x - fx * 1.3 * idx; z = L.z - fz * 1.3 * idx; }
+    return { x, z };
   }
 
   // ---- GIGN : fusils d'assaut, tirs en rafale, grenades aveuglantes
@@ -979,6 +1143,7 @@ export class World {
       const d = p ? Math.hypot(p.x - n.x, p.z - n.z) : 99;
       n.vis = !!p && p.st === 'alive' && d < 45 && this.los(n.x, n.z, p.x, p.z);
       if (n.vis && p.crowd === 2 && d > 8 && this.time - p.shootT > 6 && !this.gunOut(p)) n.vis = false;
+      if (n.vis && this.inSafeZone(p)) n.vis = false;
       if (n.vis) { n.lx = p.x; n.lz = p.z; n.lostT = this.time; }
       return;
     }
@@ -988,7 +1153,7 @@ export class World {
       const dx = p.x - n.x, dz = p.z - n.z, d = Math.hypot(dx, dz);
       const hot = this.time - p.shootT < 10;
       const range = 40 * (hot ? 1 : this.stealth(p)) * (p.crouch && !hot ? 0.6 : 1);
-      const suspicious = p.armed || hot || this.time - p.hitCrsT < 40 || (p.inv.length && d < 12);
+      const suspicious = (p.armed || hot || this.time - p.hitCrsT < 40 || (p.inv.length && d < 12)) && !this.inSafeZone(p);
       if (!suspicious || d > range || d > bd) continue;
       if (d > 5 && Math.abs(angDiff(Math.atan2(dx, dz), n.rot)) > 1.4) continue;
       if (!this.los(n.x, n.z, p.x, p.z)) continue;
@@ -1291,6 +1456,16 @@ export class World {
   }
 
   stepGJ(n, dt, g) {
+    if (n.vendor) { n.rot += dt * 0.15; return; }
+    // cortège en colère : on renvoie des projectiles sur les CRS
+    if (g && g.angryU > this.time && n.st !== 'down' && this.time > n.cdThrow && this.time >= n.stunU) {
+      n.cdThrow = this.time + 3 + this.rng() * 4;
+      for (const c of this.npcs) {
+        if (!isPolice(c) || c.st === 'down') continue;
+        const d = Math.hypot(c.x - n.x, c.z - n.z);
+        if (d > 5 && d < 18 && this.los(n.x, n.z, c.x, c.z)) { n.rot = Math.atan2(c.x - n.x, c.z - n.z); this.lobAt(n, 'pave', c.x, c.z, n.id, 'n'); n.atkT = this.time; break; }
+      }
+    }
     if (n.st === 'down') {
       if (this.time > n.downU) {
         this.npcs.splice(this.npcs.indexOf(n), 1);
@@ -1386,6 +1561,7 @@ export class World {
     }
 
     const players = [...this.players.values()].filter((p) => p.st === 'alive');
+    this.stepHeli(dt, players);
     for (const g of this.corteges) this.stepCortege(g, dt);
     for (let i = 0; i < this.npcs.length; i++) {
       const n = this.npcs[i];
@@ -1450,7 +1626,7 @@ export class World {
       if ((this.tick + p.id) % 5 === 0) {
         let c = 0;
         for (const n of this.npcs) if (n.kind === NPC_GJ && n.st !== 'down' && Math.abs(n.x - p.x) < 3.5 && Math.abs(n.z - p.z) < 3.5) c++;
-        p.crowd = c >= 3 ? (p.tenue === 'gilet_jaune' ? 2 : 1) : 0;
+        p.crowd = c >= 3 ? (p.tenue === 'gilet_jaune' || this.time < (p.gjRep || 0) ? 2 : 1) : 0;
       }
       p.inGas = false;
       for (const g of this.gas) if (Math.hypot(g.x - p.x, g.z - p.z) < g.r) p.inGas = true;
@@ -1506,8 +1682,9 @@ export class World {
         else np.push([n.id, n.kind, r2(n.x), r2(n.z), r2(n.rot), f]);
       }
       const rl = p.reloading ? r2(Math.max(0, p.reloadU - this.time)) : 0;
+      const hl = this.heli.active ? [r2(this.heli.lx), r2(this.heli.lz)] : undefined;
       p.send({
-        t: 'snap', tm: time, h: heat, p: pl, n: np,
+        t: 'snap', tm: time, h: heat, p: pl, n: np, hl,
         me: {
           hp: Math.round(p.hp), st: r2(Math.max(0, p.stunU - this.time)), g: p.inGas && !p.gasImmune ? 1 : 0,
           ex: r2(p.ex), am: p.ammo, th: p.thr, mg: p.mag, cur: p.cur, rl, b: p.band, x: r2(p.x), z: r2(p.z), cr: p.crowd,

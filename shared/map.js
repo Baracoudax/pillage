@@ -13,6 +13,7 @@ export const DOOR_W = 4;
 const PERIOD = BLOCK + STREET;
 const HASH = 8;        // taille des cellules du hash spatial des collisions (m)
 const INFLATE = 0.3;   // gonflement des obstacles dans la grille de navigation
+const STEP = 0.35;     // hauteur franchissable sans sauter
 
 const BUILDING_COLORS = [0xd8c9b0, 0xc9b79c, 0xb7a58e, 0xe0d6c4, 0xa89f94, 0xc4b2a0, 0x9d9389, 0xd1c2a9];
 
@@ -78,6 +79,7 @@ export class CityMap {
     // Mobilier urbain sur les trottoirs (générateur séparé pour ne pas modifier le reste de la carte)
     this.decor = [];
     this.decorate(mulberry32(d.seed + 7));
+    this.furnish(mulberry32(d.seed + 11));
 
     // Bordures de carte : murs invisibles + rangée d'immeubles extérieurs
     const E = 2;
@@ -301,6 +303,46 @@ export class CityMap {
     }
   }
 
+  // Arbres, feux tricolores, fourgons de police : générateur séparé (n'altère pas le reste de la carte)
+  furnish(rng) {
+    const n = this.d.size;
+    const treeChance = { cite: 0.25, centre: 0.5, luxe: 0.8 }[this.d.id] ?? 0.5;
+    const doors = this.shops.map((s) => s.door);
+    const free = (x, z, r) => !doors.some((d) => Math.hypot(d.x - x, d.z - z) < 4)
+      && !this.lamps.some((l) => Math.hypot(l.x - x, l.z - z) < r)
+      && !this.decor.some((o) => Math.hypot(o.x - x, o.z - z) < r + 0.6);
+    for (let bi = 0; bi < n; bi++) for (let bj = 0; bj < n; bj++) {
+      const bx = STREET + bi * PERIOD, bz = STREET + bj * PERIOD;
+      // feux tricolores aux angles des blocs
+      for (const [cx, cz, rot] of [[bx + 0.5, bz + 0.5, Math.PI * 1.25], [bx + BLOCK - 0.5, bz + 0.5, Math.PI * 0.75], [bx + 0.5, bz + BLOCK - 0.5, -Math.PI * 0.25], [bx + BLOCK - 0.5, bz + BLOCK - 0.5, Math.PI * 0.25]]) {
+        if (rng() < 0.45) continue;
+        this.decor.push({ type: 'tlight', x: cx, z: cz, rot, solid: this.addSolid(cx - 0.12, cz - 0.12, cx + 0.12, cz + 0.12, 3, 'decor') });
+      }
+      // arbres d'alignement au bord du trottoir
+      const edges = [[bx + 4, bz + 0.6, 1, 0], [bx + 4, bz + BLOCK - 0.6, 1, 0], [bx + 0.6, bz + 4, 0, 1], [bx + BLOCK - 0.6, bz + 4, 0, 1]];
+      for (const [x0, z0, ux, uz] of edges) {
+        if (rng() > treeChance) continue;
+        for (let t = 1 + rng() * 3; t < BLOCK - 8; t += 7 + rng() * 3) {
+          const x = x0 + ux * t, z = z0 + uz * t;
+          if (!free(x, z, 1.8)) continue;
+          this.decor.push({ type: rng() < 0.7 ? 'tree' : 'treeS', x, z, rot: rng() * 6.28, solid: this.addSolid(x - 0.2, z - 0.2, x + 0.2, z + 0.2, 4, 'decor') });
+        }
+      }
+    }
+    // fourgons de CRS stationnés derrière les barrages des carrefours extérieurs
+    for (const o of this.decor.filter((o) => o.type === 'roadblock')) {
+      if (rng() < 0.55) continue;
+      const alongX = o.rot === 0;
+      const edgeLow = alongX ? o.z < 2 : o.x < 2;
+      const off = edgeLow ? 2.2 : -2.2;
+      const x = alongX ? o.x : o.x + off, z = alongX ? o.z + off : o.z;
+      if (this.props.some((p) => p.type === 'police' && Math.hypot(p.x - x, p.z - z) < 6)) continue;
+      const hw = alongX ? 2.4 : 1.05, hd = alongX ? 1.05 : 2.4;
+      const s = this.addSolid(x - hw, z - hd, x + hw, z + hd, 2.2, 'car');
+      this.props.push({ type: 'police', van: rng() < 0.6, x, z, alongX, burning: false, solid: s });
+    }
+  }
+
   clearProps(x, z, r) {
     const hit = (s) => s.x1 > x - r && s.x0 < x + r && s.z1 > z - r && s.z0 < z + r;
     const removed = new Set(this.props.filter((p) => hit(p.solid)).map((p) => p.solid));
@@ -346,7 +388,9 @@ export class CityMap {
   }
 
   // Déplace un cercle avec glissement le long des murs. Retourne [x, z].
-  move(x, z, dx, dz, r) {
+  // footY : hauteur des pieds ; les obstacles plus bas que footY + STEP sont franchis (saut, marche)
+  move(x, z, dx, dz, r, footY = 0) {
+    const top = footY + STEP;
     const len = Math.hypot(dx, dz);
     const steps = Math.max(1, Math.ceil(len / (r * 0.8)));
     const sx = dx / steps, sz = dz / steps;
@@ -355,6 +399,7 @@ export class CityMap {
       for (let it = 0; it < 2; it++) {
         const list = this.query(x - r, z - r, x + r, z + r);
         for (const s of list) {
+          if (s.h <= top) continue;
           const cx = x < s.x0 ? s.x0 : x > s.x1 ? s.x1 : x;
           const cz = z < s.z0 ? s.z0 : z > s.z1 ? s.z1 : z;
           const ddx = x - cx, ddz = z - cz;
@@ -376,12 +421,24 @@ export class CityMap {
     return [x, z];
   }
 
-  circleBlocked(x, z, r) {
+  circleBlocked(x, z, r, footY = 0) {
     for (const s of this.query(x - r, z - r, x + r, z + r)) {
+      if (s.h <= footY + STEP) continue;
       const cx = Math.max(s.x0, Math.min(x, s.x1)), cz = Math.max(s.z0, Math.min(z, s.z1));
       if ((x - cx) ** 2 + (z - cz) ** 2 < r * r * 0.8) return true;
     }
     return false;
+  }
+
+  // hauteur du sol sous un cercle (dessus de voiture, banc...) atteignable depuis footY
+  groundAt(x, z, r, footY) {
+    let g = 0;
+    for (const s of this.query(x - r, z - r, x + r, z + r)) {
+      if (s.h > footY + STEP || s.h <= g) continue;
+      const cx = Math.max(s.x0, Math.min(x, s.x1)), cz = Math.max(s.z0, Math.min(z, s.z1));
+      if ((x - cx) ** 2 + (z - cz) ** 2 < r * r * 0.5) g = s.h;
+    }
+    return g;
   }
 
   solidAt(x, z, y) {
@@ -519,7 +576,7 @@ export class CityMap {
   }
 
   // A* 8 directions sur grille 1 m, puis lissage par ligne droite.
-  path(sx, sz, tx, tz, maxIter = 9000) {
+  path(sx, sz, tx, tz, maxIter = 14000) {
     const G = this.G;
     const s = this.nearestFree(Math.floor(sx), Math.floor(sz));
     const t = this.nearestFree(Math.floor(tx), Math.floor(tz));
@@ -530,7 +587,7 @@ export class CityMap {
     const ti = t % G, tj = (t / G) | 0;
     const h = (k) => {
       const dx = Math.abs((k % G) - ti), dz = Math.abs(((k / G) | 0) - tj);
-      return dx + dz - 0.586 * Math.min(dx, dz);
+      return (dx + dz - 0.586 * Math.min(dx, dz)) * 1.2; // A* légèrement pondéré : bien plus rapide, chemin quasi optimal
     };
     let hs = 0;
     const push = (k) => {

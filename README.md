@@ -43,7 +43,9 @@ qui se connecte à un serveur distant : `https://mon-jeu/?server=https://mon-ser
 | **Gilets jaunes** | Des cortèges défilent de carrefour en carrefour et se rassemblent au rond-point occupé (cercle jaune sur la minimap). Au milieu d'un cortège, la distance de détection des CRS est fortement réduite ; avec la tenue « Gilet jaune », tu deviens presque invisible. Si tu leur tires dessus, le cortège se retourne contre toi. Les CRS gazent parfois les cortèges, qui se dispersent. |
 | **Pilleurs rivaux** | 3 à 5 par raid, ils pillent les mêmes magasins que toi (ils vident les rayons) puis filent vers une sortie. Leur arme dépend du quartier : mêlée et pierres à La Cité, mortiers au Centre-ville, parfois armes à feu au Triangle d'Or (leurs tirs font aussi venir le GIGN). Les plus agressifs rackettent les joueurs chargés de butin. Ils ripostent si on les attaque et fuient la police. **K.O., ils lâchent un sac avec tout leur butin, leur arme et leurs munitions.** Une arme récupérée peut être gardée à la planque si le contact correspondant est débloqué, sinon revendue. |
 | **Émeutiers** | Cagoulés façon black bloc. Ils errent, pillent aussi et lancent des pavés ou des cocktails Molotov sur les CRS. La tenue « Cagoule » les rend beaucoup moins agressifs envers toi. Si tu portes du butin, certains t'attaquent et **volent l'objet le plus cher** puis s'enfuient : mets-les K.O. pour le récupérer. |
-| **CRS** | Patrouilles de 3 (casque, visière, épaulières, bouclier, LBD) qui convergent vers les magasins récemment pillés et vers les coups de feu. Vue en cône, ligne de vue réelle. **Le bouclier arrête les balles de face** : il faut viser la tête ou les prendre de flanc. Tirs de LBD (étourdissement), grenades lacrymogènes et de désencerclement, matraque. Être mis à terre par eux = **interpellation** (butin saisi et amende de 10 %). |
+| **CRS** | Escouades de 4 en formation (casque, visière, épaulières, bouclier, LBD) qui convergent vers les magasins récemment pillés et vers les coups de feu. Vue en cône, ligne de vue réelle. **Le bouclier arrête les balles de face** : il faut viser la tête ou les prendre de flanc. Tirs de LBD (étourdissement), grenades lacrymogènes et de désencerclement, matraque. Être mis à terre par eux = **interpellation** (butin saisi et amende de 10 %). |
+| **Alarmes et hélicoptère** | Piller un magasin déclenche son alarme (gyrophare rouge à la porte) : l'escouade de CRS la plus proche est envoyée sur place en formation et prend en chasse le pilleur. Quand la tension monte, un **hélicoptère** balaie le quartier au projecteur et suit le pilleur le plus recherché : être pris dans le faisceau dehors (hors cortège) appelle les CRS. Rester à couvert dans les magasins ou se fondre dans un cortège permet de l'éviter. |
+| **Rond-point des gilets jaunes** | Campement avec banderole et braseros. Le **receleur solidaire** y rachète le butin sur place (60 % en liasses, plus légères). Donner de la nourriture au cortège fait que les gilets jaunes te couvrent pendant 3 min (compte à rebours affiché). Le rond-point est une zone de répit tant qu'on n'y a pas tiré. Si les CRS gazent un cortège, les gilets jaunes en colère leur lancent des pavés. |
 | **Tension** | Monte avec le temps, le pillage et les attaques contre les CRS. Plus elle est haute, plus il y a de renforts. |
 | **Discrétion** | S'accroupir réduit fortement la distance de détection. Le sprint consomme de l'endurance. |
 | **Échec** | K.O., interpellation ou fin du temps : le butin et les consommables emportés sont perdus. Ils restent au sol dans un sac (butin, munitions, grenades) que les autres joueurs peuvent fouiller. L'équipement acheté est conservé. |
@@ -56,7 +58,7 @@ donnent accès à de nouveaux magasins (Hi-Fi, bijouteries, luxe), à du loot pl
 ### Contrôles
 - **PC** : ZQSD/WASD pour bouger, souris pour viser, clic gauche pour frapper ou tirer, clic droit pour viser à
   la mire ou à la lunette, R pour recharger, 1 (mêlée), 2 (arme principale), 3 (arme secondaire) ou la molette
-  pour changer d'arme, G pour lancer, T pour choisir le projectile, V pour un coup rapide, **E maintenu** pour piller, Maj pour sprinter, C pour s'accroupir, H pour
+  pour changer d'arme, G pour lancer, T pour choisir le projectile, V pour un coup rapide, **E maintenu** pour piller, Maj pour sprinter, **Espace pour sauter** (barricades, bancs, capots, toits de voitures), C pour s'accroupir, H pour
   un bandage, Tab pour le sac et Échap pour la pause.
 - **Mobile** : joystick à gauche, glisser à droite pour viser, boutons tir, visée, rechargement, arme,
   grenade, etc. Visée légèrement assistée.
@@ -129,16 +131,26 @@ et 16 animations de la [Universal Animation Library](https://quaternius.itch.io/
 sprint, accroupi, tir, frappe, ramassage, chute…), CC0. Les corps de base sont **habillés par un shader** qui peint les
 vêtements par zone du corps selon la faction : émeutiers en noir et cagoulés, CRS, GIGN, gilets jaunes (gilet fluo à
 bandes réfléchissantes), pilleurs rivaux, joueurs. Casques, visières, boucliers, capuches, sacs, pancartes et armes sont
-accrochés aux os. **Niveau de détail** : seuls les 6, 12 ou 20 personnages les plus proches (selon la qualité) sont
-animés en 3D, les autres restent des silhouettes instanciées. `tools/build-characters.mjs` prépare les fichiers
+accrochés aux os. **Niveau de détail** : seuls les 10, 18 ou 28 personnages les plus proches (selon la qualité) sont
+animés en 3D (animation des plus lointains mise à jour une image sur deux ou trois), les autres restent des silhouettes instanciées. `tools/build-characters.mjs` prépare les fichiers
 (800 Ko au total).
 
 **Ville** : immeubles du [Kenney City Kit Commercial](https://kenney.nl/assets/city-kit-commercial), 4 par parcelle ;
 mobilier urbain des [City Environment Packs](https://3dmodelscc0.itch.io/city-environment-pack) de 3dmodelscc0
 (bancs, poubelles, cabines, distributeurs, abribus, toilettes de chantier, bennes, boîtiers électriques, plots, blocs
 de béton) ; objets de butin modélisés (consoles, radios, appareils photo, casques VR, surgelés…) des packs
-Electronics & Food. Ces packs en FBX sont convertis par `tools/convert-fbx-pack.mjs`. Tout est instancié : un draw call
-par type de modèle.
+Electronics & Food. Ces packs en FBX sont convertis par `tools/convert-fbx-pack.mjs`. Véhicules (voitures garées, retournées ou calcinées, fourgons de CRS avec gyrophares), débris (pneus, portières,
+pare-chocs, barils, cartons), arbres, feux tricolores, barrières de chantier et mobilier des magasins (frigos, télés,
+écrans, présentoirs, portants, plafonniers) viennent des kits Kenney [Car Kit](https://kenney.nl/assets/car-kit),
+[City Kit Roads](https://kenney.nl/assets/city-kit-roads), [City Kit Suburban](https://kenney.nl/assets/city-kit-suburban), [Furniture Kit](https://kenney.nl/assets/furniture-kit) et
+[Food Kit](https://kenney.nl/assets/food-kit) (CC0) ; textures de sol, trottoirs, carrelage et enduits de
+[Poly Haven](https://polyhaven.com) (CC0). Générés par le code : rayonnages garnis (avec trous laissés par les pillards),
+vitrines brisées, rideaux métalliques forcés, tags, éclats de verre, papiers et pavés au sol, hélicoptère et son faisceau.
+Tout est instancié ou fusionné : un draw call par type de modèle (`client/src/cityDetail.js`).
+
+**Ambiance** : le menu affiche un travelling 3D dans la Cité en feu. En raid, sons positionnés en stéréo, pas, sirènes
+deux-tons au loin, chants de la foule et détonations dont la fréquence suit la tension, rotor de l'hélicoptère,
+alarmes de magasins ; boussole en haut de l'écran (sorties, rond-point, hélicoptère).
 
 ## Intégration des autres assets
 

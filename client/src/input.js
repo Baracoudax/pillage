@@ -19,7 +19,7 @@ export class Input {
 
     const bindKey = {
       KeyE: 'interact', KeyF: 'interact', KeyH: 'heal', Digit4: 'heal', Tab: 'inv', KeyI: 'inv', KeyV: 'melee', Escape: 'pause', KeyP: 'pause',
-      KeyR: 'reload', Digit1: 'melee_slot', Digit2: 'primary', Digit3: 'sidearm', KeyG: 'throw', KeyT: 'nextThrow', KeyX: 'swap',
+      Space: 'jump', KeyR: 'reload', Digit1: 'melee_slot', Digit2: 'primary', Digit3: 'sidearm', KeyG: 'throw', KeyT: 'nextThrow', KeyX: 'swap',
     };
     this.adsToggle = false;
     window.addEventListener('keydown', (e) => {
