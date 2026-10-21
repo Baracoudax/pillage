@@ -75,6 +75,10 @@ export class CityMap {
       }
     }
 
+    // Mobilier urbain sur les trottoirs (générateur séparé pour ne pas modifier le reste de la carte)
+    this.decor = [];
+    this.decorate(mulberry32(d.seed + 7));
+
     // Bordures de carte : murs invisibles + rangée d'immeubles extérieurs
     const E = 2;
     this.addSolid(-E - 20, -E - 20, 0, size + E + 20, 40, 'edge');
@@ -249,12 +253,65 @@ export class CityMap {
     }
   }
 
+  decorate(rng) {
+    const n = this.d.size;
+    const DECOR = [
+      // type, poids, demi-largeur, demi-profondeur, hauteur de collision (0 = décor seul)
+      ['bench', 3, 0.9, 0.35, 0.9], ['trash', 4, 0.3, 0.3, 1.3], ['mailbox', 2, 0.25, 0.25, 1.1], ['payphone', 1, 0.2, 0.2, 1.5],
+      ['atm', 1, 0.33, 0.25, 1.5], ['ebox', 2, 0.4, 0.18, 1.6], ['busstop', 1, 2.6, 0.7, 2.5], ['cone', 2, 0, 0, 0],
+      ['portaloo', 1, 0.7, 0.7, 2.6], ['dumpster', 2, 1.0, 0.6, 1.4],
+    ];
+    const total = DECOR.reduce((s, x) => s + x[1], 0);
+    const pickType = () => { let r = rng() * total; for (const x of DECOR) { r -= x[1]; if (r <= 0) return x; } return DECOR[0]; };
+    const doors = this.shops.map((s) => s.door);
+    for (let bi = 0; bi < n; bi++) for (let bj = 0; bj < n; bj++) {
+      const bx = STREET + bi * PERIOD, bz = STREET + bj * PERIOD;
+      // 4 bords du bloc, l'objet est posé au milieu du trottoir, face à la rue
+      const edges = [
+        { x0: bx + 3, x1: bx + BLOCK - 3, z: bz + 1.05, rot: Math.PI, along: 'x' },
+        { x0: bx + 3, x1: bx + BLOCK - 3, z: bz + BLOCK - 1.05, rot: 0, along: 'x' },
+        { z0: bz + 3, z1: bz + BLOCK - 3, x: bx + 1.05, rot: -Math.PI / 2, along: 'z' },
+        { z0: bz + 3, z1: bz + BLOCK - 3, x: bx + BLOCK - 1.05, rot: Math.PI / 2, along: 'z' },
+      ];
+      for (const e of edges) {
+        const L = e.along === 'x' ? e.x1 - e.x0 : e.z1 - e.z0;
+        for (let t = 2 + rng() * 4; t < L - 1; t += 5 + rng() * 6) {
+          if (rng() < 0.35) continue;
+          const x = e.along === 'x' ? e.x0 + t : e.x, z = e.along === 'x' ? e.z : e.z0 + t;
+          if (doors.some((d) => Math.hypot(d.x - x, d.z - z) < 4.5)) continue;
+          if (this.lamps.some((l) => Math.hypot(l.x - x, l.z - z) < 1.6)) continue;
+          if (this.decor.some((o) => Math.hypot(o.x - x, o.z - z) < 2.2)) continue;
+          const [type, , hw, hd, h] = pickType();
+          // le long d'un bord vertical, la largeur de l'objet suit l'axe Z
+          const ax = e.along === 'x' ? hw : hd, az = e.along === 'x' ? hd : hw;
+          const o = { type, x, z, rot: e.rot };
+          if (h) o.solid = this.addSolid(x - ax, z - az, x + ax, z + az, h, 'decor');
+          this.decor.push(o);
+        }
+      }
+    }
+    // barrières de béton aux carrefours extérieurs (zones de police)
+    for (let i = 0; i <= n; i++) for (const [x, z] of [[i * PERIOD + STREET / 2, 1.2], [i * PERIOD + STREET / 2, this.size - 1.2], [1.2, i * PERIOD + STREET / 2], [this.size - 1.2, i * PERIOD + STREET / 2]]) {
+      if (rng() < 0.5) continue;
+      const alongX = z < 2 || z > this.size - 2;
+      for (const k of [-1, 1]) {
+        const ox = alongX ? x + k * 3.5 : x, oz = alongX ? z : z + k * 3.5;
+        this.decor.push({ type: 'roadblock', x: ox, z: oz, rot: alongX ? 0 : Math.PI / 2, solid: this.addSolid(ox - (alongX ? 1 : 0.3), oz - (alongX ? 0.3 : 1), ox + (alongX ? 1 : 0.3), oz + (alongX ? 0.3 : 1), 1, 'decor') });
+      }
+    }
+  }
+
   clearProps(x, z, r) {
     const hit = (s) => s.x1 > x - r && s.x0 < x + r && s.z1 > z - r && s.z0 < z + r;
     const removed = new Set(this.props.filter((p) => hit(p.solid)).map((p) => p.solid));
     this.props = this.props.filter((p) => !removed.has(p.solid));
     this.solids = this.solids.filter((s) => !removed.has(s));
     this.fires = this.fires.filter((f) => Math.hypot(f.x - x, f.z - z) > r + 1);
+    if (this.decor) {
+      const gone = new Set(this.decor.filter((o) => Math.hypot(o.x - x, o.z - z) < r + 1.5).map((o) => o.solid).filter(Boolean));
+      this.decor = this.decor.filter((o) => Math.hypot(o.x - x, o.z - z) >= r + 1.5);
+      this.solids = this.solids.filter((s) => !gone.has(s));
+    }
   }
 
   // --- Hash spatial des AABB -------------------------------------------------

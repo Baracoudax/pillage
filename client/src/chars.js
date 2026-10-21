@@ -45,6 +45,12 @@ const GJ_YELLOW = 0xd7f20f, STRIPE = 0xb9c2c9;
 export function playerColor(id) { return PLAYER_COLORS[(id - 1 + PLAYER_COLORS.length) % PLAYER_COLORS.length]; }
 
 export function appearance(kind, id, extra = {}) {
+  const look = appearance0(kind, id, extra);
+  look.kind = kind;
+  return look;
+}
+
+function appearance0(kind, id, extra = {}) {
   const h = (id * 2654435761) >>> 0;
   const pick = (arr, s) => arr[(h >>> s) % arr.length];
   if (kind === 'crs') {

@@ -1,0 +1,34 @@
+<!doctype html><html><body style="margin:0;background:#222"><script type="module">
+// Outil de dev : banc de présentation des tenues par faction
+import * as THREE from 'three';
+import { loadHumans, HumanPool } from '/src/humans.js';
+import { loadModel } from '/src/assets.js';
+const q = new URLSearchParams(location.search);
+const anim = q.get('anim') || 'idle';
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(1500, 700); document.body.appendChild(r.domElement);
+r.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x3a3a44);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x555555, 2.2));
+const d = new THREE.DirectionalLight(0xffffff, 1.5); d.position.set(2, 4, 5); scene.add(d);
+await loadHumans();
+const [m4, batte] = await Promise.all([loadModel('weapons/M4A1'), loadModel('melee/NailBat')]);
+const pool = new HumanPool(scene, { humans: 20, shadows: false, humanRange: 100 });
+const kinds = [['rioter', 11], ['rioter', 1234567], ['crs', 5], ['gign', 7], ['gj', 3], ['gj', 2048 * 3], ['looter', 9], ['looter', 512], ['player', 1, { tenue: 'gilet_jaune', color: 0xff7a18 }], ['player', 2, { tenue: 'cagoule' }]];
+const cands = kinds.map(([kind, h, extra], i) => ({ key: i, kind, h, extra: extra || {}, d2: i }));
+pool.assignT = 0; pool.assign(cands, 0);
+const cam = new THREE.PerspectiveCamera(30, 1500 / 700, 0.1, 100);
+const yaw = Number(q.get('yaw') || 0);
+cam.position.set(4.5 + Math.sin(yaw) * 14, 1.6, Math.cos(yaw) * 14); cam.lookAt(4.5, 1.0, 0);
+let t = 0;
+for (let f = 0; f < Number(q.get('frames') || 30); f++) {
+  kinds.forEach(([kind], i) => {
+    const s = { x: i * 1.0, z: 0, rot: 0, moving: anim === 'walk', run: false, down: anim === 'down', attack: anim === 'attack', armed: kind === 'gign' || kind === 'crs' || i === 7, melee: i === 6 };
+    const wm = kind === 'gign' ? m4 : i === 6 ? batte : null;
+    if (wm) wm.id = kind === 'gign' ? 'm4a1' : 'batte';
+    pool.update(i, s, 1 / 30, wm);
+  });
+}
+r.render(scene, cam);
+document.title = 'done';
+</script></body></html>

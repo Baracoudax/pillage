@@ -55,7 +55,7 @@ export function loadModel(path) {
         if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; }
       });
       const box = new THREE.Box3().setFromObject(g.scene);
-      const res = { scene: g.scene, box };
+      const res = { scene: g.scene, box, animations: g.animations };
       cache.get(path).value = res;
       return res;
     }).catch((e) => { console.warn('modèle introuvable', path, e); return null; });

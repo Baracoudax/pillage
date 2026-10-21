@@ -2,9 +2,9 @@
 import * as THREE from 'three';
 
 export const QUALITY = {
-  low:    { label: 'Bas',   maxPR: 1,    minPR: 0.5, shadows: false, lights: 0, fogFar: 70,  drawDist: 60,  particles: 0.35, aa: false },
-  medium: { label: 'Moyen', maxPR: 1.25, minPR: 0.6, shadows: false, lights: 2, fogFar: 95,  drawDist: 80,  particles: 0.7,  aa: false },
-  high:   { label: 'Haut',  maxPR: 2,    minPR: 0.7, shadows: true,  lights: 4, fogFar: 125, drawDist: 105, particles: 1,    aa: true },
+  low:    { label: 'Bas',   maxPR: 1,    minPR: 0.5, shadows: false, lights: 0, fogFar: 70,  drawDist: 60,  particles: 0.35, aa: false, humans: 6, humanRange: 26 },
+  medium: { label: 'Moyen', maxPR: 1.25, minPR: 0.6, shadows: false, lights: 2, fogFar: 95,  drawDist: 80,  particles: 0.7,  aa: false, humans: 12, humanRange: 35 },
+  high:   { label: 'Haut',  maxPR: 2,    minPR: 0.7, shadows: true,  lights: 4, fogFar: 125, drawDist: 105, particles: 1,    aa: true, humans: 20, humanRange: 45 },
 };
 
 export const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;

@@ -1,0 +1,20 @@
+<!doctype html><html><body style="margin:0;background:#222"><script type="module">
+// Outil de dev : dimensions, os et animations des personnages
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const g = await L.loadAsync('/models/chars/male.glb');
+const a = await L.loadAsync('/models/chars/anims.glb');
+const out = {};
+g.scene.updateMatrixWorld(true);
+out.box = new THREE.Box3().setFromObject(g.scene);
+g.scene.traverse((o) => {
+  if (o.isSkinnedMesh) { o.geometry.computeBoundingBox(); out[o.name] = { geo: o.geometry.boundingBox, mat: o.material.name, matrixWorld: o.matrixWorld.elements.map((v) => +v.toFixed(3)), bindMatrix: o.bindMatrix.elements.map((v) => +v.toFixed(3)) }; }
+  if (o.isBone && ['Head', 'hand_r', 'hand_l', 'pelvis', 'spine_03', 'foot_l', 'upperarm_l'].includes(o.name)) out['bone_' + o.name] = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+});
+out.clips = a.animations.map((c) => c.name + ':' + c.duration.toFixed(2) + ':' + c.tracks.length);
+out.track0 = a.animations[0].tracks.slice(0, 3).map((t) => t.name);
+document.title = 'done';
+window.__out = JSON.stringify(out);
+</script></body></html>

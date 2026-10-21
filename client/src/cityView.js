@@ -5,6 +5,35 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCK, STREET, WALL_H } from '../../shared/map.js';
 import { SHOP_TYPES } from '../../shared/config.js';
 import { ITEMS, RARITY } from '../../shared/items.js';
+import { getModel } from './assets.js';
+
+// Modèles 3D (Kenney City Kit Commercial, packs CC0 3dmodelscc0)
+export const BUILDINGS = ['building-a', 'building-b', 'building-c', 'building-d', 'building-e', 'building-f', 'building-g', 'building-h', 'building-i', 'building-j', 'building-k', 'building-l', 'building-m', 'building-n'];
+export const TOWERS = ['building-skyscraper-a', 'building-skyscraper-b', 'building-skyscraper-c', 'building-skyscraper-d', 'building-skyscraper-e'];
+export const DECOR_MODELS = { bench: ['props/StreetBench', 1], trash: ['props/PlasticTrashBin', 1], mailbox: ['props/CityMailBox', 1], payphone: ['props/Payphone', 1.2], atm: ['props/ATM', 1.25], ebox: ['props/RealisticElectricalBox', 1], busstop: ['props/Bus_Stop', 1], cone: ['props/Traffic_Cone', 1.3], portaloo: ['props/Portaloo', 1], dumpster: ['props/Dumpster', 1], roadblock: ['props/RoadBlock', 2] };
+// objet de butin -> [modèle, taille max (m)]
+export const LOOT_MODELS = {
+  console: ['loot/Console', 0.32], enceinte: ['loot/Radio', 0.3], radio: ['loot/Radio', 0.34], micro: ['loot/Microphone', 0.35], casque_vr: ['loot/VRGoggles', 0.22],
+  appareil: ['loot/Digital_Camera', 0.15], routeur: ['loot/Router', 0.22], cle_usb: ['loot/USB_Stick', 0.08], talkie: ['loot/WalkieTalkie', 0.16],
+  surgeles: ['loot/FrozenPizza', 0.32], thon: ['loot/Canned_Tuna', 0.12], lait: ['loot/Milk', 0.3], glace: ['loot/Ice_Cream', 0.25], tartiner: ['loot/CannedFood', 0.2],
+};
+export const CITY_MODEL_PATHS = [...BUILDINGS, ...TOWERS].map((b) => 'city/' + b)
+  .concat(Object.values(DECOR_MODELS).map((x) => x[0]), [...new Set(Object.values(LOOT_MODELS).map((x) => x[0]))]);
+
+// géométrie unique d'un modèle (transformée du nœud appliquée), matériau Lambert (léger)
+function flatModel(path) {
+  const m = getModel(path);
+  if (!m) return null;
+  let mesh = null;
+  m.scene.updateMatrixWorld(true);
+  m.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+  if (!mesh) return null;
+  const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+  geo.computeBoundingBox();
+  const src = mesh.material;
+  const mat = new THREE.MeshLambertMaterial({ map: src.map || null, color: src.map ? 0xffffff : src.color });
+  return { geo, mat, box: geo.boundingBox };
+}
 
 const _c = new THREE.Color();
 
@@ -133,9 +162,10 @@ export class CityView {
     walkMesh.receiveShadow = q.shadows;
     add(new THREE.Mesh(mergeGeometries(marks), new THREE.MeshBasicMaterial({ vertexColors: true })));
 
-    // immeubles (une seule géométrie, texture de fenêtres procédurale)
+    // immeubles : modèles Kenney (2x2 par parcelle) quand ils sont chargés, sinon blocs à fenêtres
     const ft = facadeTextures();
-    const bld = map.buildings.map((b) => box(b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, b.c, 'facade'));
+    const kenney = this.kenneyBuildings(map, q);
+    const bld = map.buildings.filter((b) => !kenney.has(b)).map((b) => box(b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, b.c, 'facade'));
     const bldMat = new THREE.MeshLambertMaterial({
       vertexColors: true, map: ft.map, emissive: 0xffffff, emissiveMap: ft.emit, emissiveIntensity: 0.85,
     });
@@ -236,6 +266,8 @@ export class CityView {
     }
     add(new THREE.Mesh(mergeGeometries(haloGeo), new THREE.MeshBasicMaterial({ map: halo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
 
+    this.decorProps(map, q);
+
     // points d'extraction
     this.exitMeshes = map.exits.map((e) => {
       const grp = new THREE.Group();
@@ -271,7 +303,114 @@ export class CityView {
     this.bags = new Map();
   }
 
+  // Remplace les immeubles pleins (au sol) par des modèles Kenney instanciés, 2x2 par parcelle.
+  kenneyBuildings(map, q) {
+    const done = new Set();
+    const types = [...BUILDINGS, ...TOWERS].map((n) => flatModel('city/' + n));
+    if (types.some((t) => !t)) return done;
+    const inst = types.map(() => []);
+    let seed = map.d.seed;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const S = map.size;
+    for (const b of map.buildings) {
+      if (b.y0 > 0) continue;
+      const w = b.x1 - b.x0, d = b.z1 - b.z0;
+      const outside = b.x1 <= 0 || b.z1 <= 0 || b.x0 >= S || b.z0 >= S;
+      // façade tournée vers la rue la plus proche
+      const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+        const x = b.x0 + (i + 0.5) * (w / 2), z = b.z0 + (j + 0.5) * (d / 2);
+        const tall = b.y1 > 14 && rnd() < 0.5;
+        const k = tall ? BUILDINGS.length + Math.floor(rnd() * TOWERS.length) : Math.floor(rnd() * BUILDINGS.length);
+        const t = types[k];
+        const sz = t.box.getSize(new THREE.Vector3());
+        const s = (Math.min(w, d) / 2 - 0.05) / Math.max(sz.x, sz.z);
+        let rot;
+        if (outside) rot = b.z1 <= 0 ? 0 : b.z0 >= S ? Math.PI : b.x1 <= 0 ? Math.PI / 2 : -Math.PI / 2;
+        else {
+          const dx = i === 0 ? -1 : 1, dz = j === 0 ? -1 : 1;
+          rot = rnd() < 0.5 ? (dx < 0 ? -Math.PI / 2 : Math.PI / 2) : (dz < 0 ? Math.PI : 0);
+        }
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(x, -t.box.min.y * s, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rot, 0)), new THREE.Vector3(s, s, s));
+        m.multiply(new THREE.Matrix4().makeTranslation(-(t.box.min.x + t.box.max.x) / 2, 0, -(t.box.min.z + t.box.max.z) / 2));
+        inst[k].push(m);
+        void cx; void cz;
+      }
+      done.add(b);
+    }
+    types.forEach((t, k) => {
+      if (!inst[k].length) return;
+      const im = new THREE.InstancedMesh(t.geo, t.mat, inst[k].length);
+      inst[k].forEach((m, i) => im.setMatrixAt(i, m));
+      im.castShadow = im.receiveShadow = q.shadows;
+      this.scene.add(im); this.objects.push(im);
+    });
+    return done;
+  }
+
+  // Mobilier urbain (bancs, poubelles, cabines, distributeurs, abribus...) : un InstancedMesh par type
+  decorProps(map, q) {
+    const groups = {};
+    for (const o of map.decor || []) (groups[o.type] ||= []).push(o);
+    for (const type in groups) {
+      const def = DECOR_MODELS[type];
+      const t = def && flatModel(def[0]);
+      if (!t) continue;
+      const s = def[1];
+      const im = new THREE.InstancedMesh(t.geo, t.mat, groups[type].length);
+      groups[type].forEach((o, i) => {
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(o.x, 0.14 - t.box.min.y * s, o.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, o.rot, 0)), new THREE.Vector3(s, s, s));
+        m.multiply(new THREE.Matrix4().makeTranslation(-(t.box.min.x + t.box.max.x) / 2, 0, -(t.box.min.z + t.box.max.z) / 2));
+        im.setMatrixAt(i, m);
+      });
+      im.castShadow = q.shadows;
+      this.scene.add(im); this.objects.push(im);
+    }
+    // objets de butin modélisés : un InstancedMesh par modèle, capacité = nombre d'emplacements
+    this.lootTypes = {};
+    const n = map.lootSpots.length;
+    for (const item in LOOT_MODELS) {
+      const [path, size] = LOOT_MODELS[item];
+      if (!this.lootTypes[path]) {
+        const t = flatModel(path);
+        if (!t) continue;
+        const im = new THREE.InstancedMesh(t.geo, t.mat, n);
+        im.frustumCulled = false;
+        const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+        for (let i = 0; i < n; i++) im.setMatrixAt(i, zero);
+        this.scene.add(im); this.objects.push(im);
+        this.lootTypes[path] = { im, t };
+      }
+    }
+  }
+
   setLoot(id, itemId) {
+    const lm = itemId && LOOT_MODELS[itemId];
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const k in this.lootTypes || {}) {
+      const { im } = this.lootTypes[k];
+      im.setMatrixAt(id, zero);
+      im.instanceMatrix.needsUpdate = true;
+    }
+    const lt = lm && this.lootTypes?.[lm[0]];
+    if (lt) {
+      const s = this.map.lootSpots[id], t = lt.t;
+      const sz = t.box.getSize(new THREE.Vector3());
+      const sc = lm[1] / Math.max(sz.x, sz.y, sz.z);
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(s.x, s.y - t.box.min.y * sc, s.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, id * 1.3, 0)), new THREE.Vector3(sc, sc, sc));
+      m.multiply(new THREE.Matrix4().makeTranslation(-(t.box.min.x + t.box.max.x) / 2, 0, -(t.box.min.z + t.box.max.z) / 2));
+      lt.im.setMatrixAt(id, m);
+      lt.im.instanceMatrix.needsUpdate = true;
+      this.lootItems[id] = itemId;
+      const m0 = new THREE.Matrix4().makeScale(0, 0, 0);
+      this.lootMesh.setMatrixAt(id, m0);
+      this.lootMesh.instanceMatrix.needsUpdate = true;
+      return;
+    }
+    this.setLootBox(id, itemId);
+  }
+
+  setLootBox(id, itemId) {
     const s = this.map.lootSpots[id];
     this.lootItems[id] = itemId;
     const m = new THREE.Matrix4();

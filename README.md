@@ -115,6 +115,22 @@ Pour (ré)optimiser des modèles : `node tools/optimize-assets.mjs <dossier_sour
 `tools/inspect-glb.mjs` et `tools/list-nodes.mjs` permettent d'inspecter un fichier, et `npm run dev` puis
 `/dev/viewer.html` affiche une planche de vignettes.
 
+**Personnages** : corps et coiffures [Quaternius Universal Base Characters](https://quaternius.itch.io/universal-base-characters)
+et 16 animations de la [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (marche, course,
+sprint, accroupi, tir, frappe, ramassage, chute…), CC0. Les corps de base sont **habillés par un shader** qui peint les
+vêtements par zone du corps selon la faction : émeutiers en noir et cagoulés, CRS, GIGN, gilets jaunes (gilet fluo à
+bandes réfléchissantes), pilleurs rivaux, joueurs. Casques, visières, boucliers, capuches, sacs, pancartes et armes sont
+accrochés aux os. **Niveau de détail** : seuls les 6, 12 ou 20 personnages les plus proches (selon la qualité) sont
+animés en 3D, les autres restent des silhouettes instanciées. `tools/build-characters.mjs` prépare les fichiers
+(800 Ko au total).
+
+**Ville** : immeubles du [Kenney City Kit Commercial](https://kenney.nl/assets/city-kit-commercial), 4 par parcelle ;
+mobilier urbain des [City Environment Packs](https://3dmodelscc0.itch.io/city-environment-pack) de 3dmodelscc0
+(bancs, poubelles, cabines, distributeurs, abribus, toilettes de chantier, bennes, boîtiers électriques, plots, blocs
+de béton) ; objets de butin modélisés (consoles, radios, appareils photo, casques VR, surgelés…) des packs
+Electronics & Food. Ces packs en FBX sont convertis par `tools/convert-fbx-pack.mjs`. Tout est instancié : un draw call
+par type de modèle.
+
 ## Intégration des autres assets
 
 Le prototype utilise des formes géométriques provisoires. Pour brancher de vrais assets, le format idéal :

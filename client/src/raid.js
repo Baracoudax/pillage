@@ -4,11 +4,12 @@ import { getMap } from '../../shared/map.js';
 import { PLAYER, SHOP_TYPES } from '../../shared/config.js';
 import { ITEMS, RARITY, GEAR_BY_ID, WEAPONS, THROWABLES, THROW_ORDER, CONSUMABLES, invValue, holdTime } from '../../shared/items.js';
 import { F, NPC_CRS, NPC_GJ, NPC_GIGN, NPC_LOOTER } from '../../shared/world.js';
-import { CityView } from './cityView.js';
+import { CityView, CITY_MODEL_PATHS } from './cityView.js';
 import { CharacterRenderer, appearance } from './chars.js';
 import { Fx } from './fx.js';
 import { ViewModel } from './viewmodel.js';
 import { loadModel, getModel, weaponPath } from './assets.js';
+import { loadHumans, HumanPool } from './humans.js';
 
 const $ = (id) => document.getElementById(id);
 const SEND_DT = 0.05;
@@ -80,6 +81,8 @@ export class Raid {
     this.chars = new CharacterRenderer(scene, this.q.shadows);
     this.fx = new Fx(scene, this.q, this.map);
     this.vm = new ViewModel(this.gfx.renderer);
+    // personnages 3D animés à proximité, silhouettes instanciées au-delà
+    this.humans = new HumanPool(scene, this.q);
     for (const [id, item] of welcome.loot) this.city.setLoot(id, item);
     for (const [id, x, z] of welcome.bags) this.city.addBag(id, x, z);
     this.mines = new Map();
@@ -120,8 +123,8 @@ export class Raid {
     const list = [lo.melee, lo.primary, lo.sidearm].filter((w) => WEAPONS[w]).map((w) => weaponPath(WEAPONS[w].model));
     list.push('proc/pierre', 'melee/PoliceBaton', 'weapons/M4A1');
     for (const k of THROW_ORDER) if (lo.cons[k] > 0) list.push(weaponPath(THROWABLES[k].model));
-    list.push('weapons/Claymore');
-    return Promise.all(list.map(loadModel));
+    list.push('weapons/Claymore', ...CITY_MODEL_PATHS);
+    return Promise.all([...list.map(loadModel), loadHumans()]);
   }
 
   get weapon() { return WEAPONS[this.wp[this.me.cur]]; }
@@ -722,10 +725,28 @@ export class Raid {
     const drawD2 = this.q.drawDist * this.q.drawDist;
     this.chars.begin();
     for (const g of this.remoteGuns.values()) g.obj.visible = false;
+    // attribution des personnages 3D aux entités les plus proches
+    const cands = [];
+    for (const p of this.players.values()) if (p.last) cands.push({ key: 'p' + p.id, kind: 'player', h: p.id, extra: { pack: p.it.buf.at(-1)?.pack, tenue: p.it.buf.at(-1)?.tenue }, d2: (p.last.x - me.x) ** 2 + (p.last.z - me.z) ** 2 });
+    for (const n of this.npcs.values()) if (n.last) cands.push({ key: 'n' + n.id, kind: n.look.kind, h: n.id, extra: {}, d2: (n.last.x - me.x) ** 2 + (n.last.z - me.z) ** 2 });
+    this.humans.assign(cands, dt);
+    const wmodel = (wid) => {
+      const w = WEAPONS[wid];
+      const m = w && getModel(weaponPath(w.model));
+      if (!m) { if (w) loadModel(weaponPath(w.model)); return null; }
+      m.id = wid;
+      return m;
+    };
     for (const p of this.players.values()) {
       const s = p.it.sample(rt);
       if (!s) continue;
       if ((s.x - me.x) ** 2 + (s.z - me.z) ** 2 > drawD2) continue;
+      if (this.humans.has('p' + p.id)) {
+        const w = WEAPONS[s.wid];
+        this.humans.update('p' + p.id, { x: s.x, z: s.z, rot: s.rot, moving: s.f & F.MOVE, run: s.f & F.RUN, sprint: true, crouch: s.f & F.CROUCH, down: s.f & F.DOWN, attack: s.f & (F.ATTACK | F.SHOOT), stun: s.f & F.STUN, armed: !!w, melee: !!w?.melee }, dt, wmodel(s.wid));
+        this.label(p.id, s.x, s.z, s.f & F.DOWN);
+        continue;
+      }
       if (s.f & F.MOVE) p.phase += dt * (s.f & F.RUN ? 14 : 9);
       const key = s.pack + s.tenue;
       if (!p.look || p.lookKey !== key) { p.look = appearance('player', p.id, { pack: s.pack, tenue: s.tenue }); p.lookKey = key; }
@@ -741,6 +762,12 @@ export class Raid {
       const s = n.it.sample(rt);
       if (!s) continue;
       if ((s.x - me.x) ** 2 + (s.z - me.z) ** 2 > drawD2) continue;
+      if (this.humans.has('n' + n.id)) {
+        const wid = n.kind === NPC_GIGN ? 'm4a1' : n.kind === NPC_LOOTER ? n.wid : null;
+        const w = WEAPONS[wid];
+        this.humans.update('n' + n.id, { x: s.x, z: s.z, rot: s.rot, moving: s.f & F.MOVE, run: s.f & F.RUN, crouch: false, down: s.f & F.DOWN, attack: s.f & F.ATTACK, throw: s.f & F.THROW, stun: s.f & F.STUN, armed: n.kind === NPC_CRS || n.kind === NPC_GIGN || (w && !w.melee), melee: !!w?.melee }, dt, wid ? wmodel(wid) : null);
+        continue;
+      }
       if (s.f & F.MOVE) n.phase += dt * (s.f & F.RUN ? 13 : 7);
       if (s.f & F.ATTACK) n.atk = 1; else n.atk = Math.max(0, (n.atk || 0) - dt * 4);
       if (s.f & F.THROW) n.thr = 1; else n.thr = Math.max(0, (n.thr || 0) - dt * 3);
@@ -794,6 +821,7 @@ export class Raid {
     this.audio.stopAmbience();
     this.city.dispose();
     this.chars.dispose();
+    this.humans.dispose();
     this.fx.dispose();
     this.vm.dispose();
     for (const s of this.labels.values()) { this.scene.remove(s); s.material.map.dispose(); s.material.dispose(); }
