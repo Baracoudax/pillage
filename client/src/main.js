@@ -12,7 +12,13 @@ const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString('fr-FR') + ' €';
 
 const profile = new Profile();
-const gfx = new Gfx($('game'), profile.d.settings.quality);
+let gfx;
+try {
+  gfx = new Gfx($('game'), profile.d.settings.quality);
+} catch (e) {
+  window.__fatal?.("Impossible d'initialiser la 3D (WebGL) : " + e.message + "\nVérifie que l'accélération matérielle est activée dans ton navigateur.");
+  throw e;
+}
 const input = new Input(gfx.canvas, $('touch'));
 const audio = new Audio();
 input.sens = profile.d.settings.sens;
@@ -132,6 +138,15 @@ $('btnReset').onclick = () => { if (confirm('Effacer toute ta progression ?')) {
 function showLoading(v) { $('loading').classList.toggle('on', v); }
 
 async function startRaid(transport, welcome, code) {
+  try { await startRaid0(transport, welcome, code); } catch (e) {
+    console.error(e);
+    showLoading(false);
+    raid = null;
+    window.__fatal?.('Le raid n\'a pas pu démarrer : ' + (e && e.message ? e.message : e));
+  }
+}
+
+async function startRaid0(transport, welcome, code) {
   showLoading(true);
   try { await Raid.preload(app.raidLoadout); } catch { /* modèles manquants : formes de secours */ }
   profile.raidStart();
@@ -155,10 +170,15 @@ $('btnSolo').onclick = () => {
   // on laisse le navigateur afficher l'écran de chargement avant la génération
   app.raidLoadout = profile.loadout();
   setTimeout(() => {
-    const tr = new LocalTransport(district, profile.d.name, app.raidLoadout);
-    const i = tr.queue.findIndex((m) => m.t === 'welcome');
-    const welcome = tr.queue.splice(i, 1)[0];
-    startRaid(tr, welcome, null);
+    try {
+      const tr = new LocalTransport(district, profile.d.name, app.raidLoadout);
+      const i = tr.queue.findIndex((m) => m.t === 'welcome');
+      const welcome = tr.queue.splice(i, 1)[0];
+      startRaid(tr, welcome, null);
+    } catch (e) {
+      showLoading(false);
+      window.__fatal?.('Le raid n\'a pas pu démarrer : ' + e.message);
+    }
   }, 30);
 };
 
@@ -264,6 +284,8 @@ requestAnimationFrame(frame);
 window.addEventListener('beforeunload', () => { if (raid) profile.save(); });
 render();
 refreshRooms();
+window.__pillageReady = true;
+window.addEventListener('unhandledrejection', (e) => console.error('promesse rejetée', e.reason));
 
 // accès debug depuis la console
 window.__pillage = { profile, get raid() { return raid; } };

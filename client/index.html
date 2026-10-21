@@ -152,6 +152,25 @@
     <button id="btnBack" class="primary big">Retour à la planque</button>
   </div>
   <div id="loading"><div>Chargement…</div></div>
+  <div id="fatal" class="panel"><h3>Oups, le jeu a rencontré un problème</h3><p id="fatalMsg"></p>
+    <p class="hint">Envoie une capture de ce message pour qu'on puisse corriger. Recharger la page (F5) suffit souvent.</p>
+    <button onclick="location.reload()" class="primary">Recharger</button></div>
+  <script>
+    // Diagnostic sans dépendance : affiché si le jeu ne démarre pas (fichier ouvert directement, navigateur trop ancien...)
+    window.__fatal = function (msg) {
+      var f = document.getElementById('fatal'), m = document.getElementById('fatalMsg');
+      if (!f || f.classList.contains('on')) return;
+      m.textContent = msg; f.classList.add('on');
+      var l = document.getElementById('loading'); if (l) l.classList.remove('on');
+    };
+    if (location.protocol === 'file:') {
+      window.addEventListener('DOMContentLoaded', function () {
+        window.__fatal("Le jeu a été ouvert directement depuis un fichier (double-clic sur index.html). Les navigateurs bloquent alors le jeu. Lance-le avec « npm start » puis ouvre http://localhost:8080, ou utilise la version en ligne.");
+      });
+    }
+    window.addEventListener('error', function (e) { if (!window.__pillageReady) window.__fatal('Erreur au démarrage : ' + (e.message || e)); });
+    setTimeout(function () { if (!window.__pillageReady && location.protocol !== 'file:') window.__fatal("Le jeu ne s'est pas chargé au bout de 20 secondes. Ton navigateur est peut-être trop ancien (il faut Chrome, Firefox, Edge ou Safari récents) ou WebGL est désactivé."); }, 20000);
+  </script>
 
   <script type="module" src="./src/main.js"></script>
 </body>
